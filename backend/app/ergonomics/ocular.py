@@ -21,6 +21,9 @@ class OcularSnapshot:
     blink_rate_per_min: float = 0.0
     inter_blink_interval_seconds: float = 0.0
     observation_seconds: float = 0.0
+    baseline_observation_seconds: float = 0.0
+    baseline_required_seconds: float = 2.0
+    blink_ready: bool = False
     visual_load: float = 0.0
     proximity_drift: float = 0.0
 
@@ -86,15 +89,18 @@ class OcularEngine:
         self.reset()
 
     def reset(self) -> None:
-        self._baseline_started: float | None = None
         self._baseline_samples: list[float] = []
         self._baseline_ear: float | None = None
+        self._baseline_observation_seconds = 0.0
+        self._last_valid_baseline_timestamp: float | None = None
         self._closed_since: float | None = None
         self._blink_times: deque[float] = deque()
         self._last_blink_time: float | None = None
         self._last_ibi = 0.0
         self._observation_started: float | None = None
-        self._snapshot = OcularSnapshot()
+        self._snapshot = OcularSnapshot(
+            baseline_required_seconds=self.baseline_seconds,
+        )
 
     def current(self) -> OcularSnapshot:
         return self._snapshot
@@ -112,18 +118,27 @@ class OcularEngine:
 
         if ear is None or confidence < self.minimum_eye_confidence:
             self._closed_since = None
+            self._last_valid_baseline_timestamp = None
             return self._emit(False, confidence, 0.0, proximity_drift, now)
 
         if self._observation_started is None:
             self._observation_started = now
 
         if self._baseline_ear is None:
-            if self._baseline_started is None:
-                self._baseline_started = now
+            if self._last_valid_baseline_timestamp is not None:
+                valid_step = clamp(
+                    now - self._last_valid_baseline_timestamp,
+                    0.0,
+                    0.25,
+                )
+                self._baseline_observation_seconds += valid_step
+            self._last_valid_baseline_timestamp = now
+
             if ear > 0.05:
                 self._baseline_samples.append(ear)
+
             if (
-                now - self._baseline_started >= self.baseline_seconds
+                self._baseline_observation_seconds >= self.baseline_seconds
                 and len(self._baseline_samples) >= 8
             ):
                 ordered = sorted(self._baseline_samples)
@@ -171,7 +186,8 @@ class OcularEngine:
             blink_rate = 0.0
 
         proximity_load = clamp((max(0.0, proximity_drift) - 0.08) / 0.25, 0.0, 1.0)
-        if self._baseline_ear is not None and observation_seconds >= 15.0:
+        blink_ready = self._baseline_ear is not None and observation_seconds >= 15.0
+        if blink_ready:
             blink_load = clamp((12.0 - blink_rate) / 8.0, 0.0, 1.0)
             visual_load = 0.65 * blink_load + 0.35 * proximity_load
         else:
@@ -189,6 +205,9 @@ class OcularEngine:
             blink_rate_per_min=round(blink_rate, 1),
             inter_blink_interval_seconds=round(self._last_ibi, 2),
             observation_seconds=round(observation_seconds, 1),
+            baseline_observation_seconds=round(self._baseline_observation_seconds, 2),
+            baseline_required_seconds=round(self.baseline_seconds, 2),
+            blink_ready=blink_ready,
             visual_load=round(clamp(visual_load, 0.0, 1.0), 4),
             proximity_drift=round(proximity_drift, 4),
         )
