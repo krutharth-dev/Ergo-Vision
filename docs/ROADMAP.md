@@ -6,40 +6,52 @@ This roadmap is directional rather than a commitment to dates.
 
 - personal neutral-posture calibration
 - torso/slouch detection using shoulders, hips and relative depth
-- live posture trend visualization
-- local browser session history
+- per-module tracking confidence with LOW_CONFIDENCE gating
+- guided camera framing and runtime camera selection
+- confidence-weighted temporal exposure and postural drift
+- personalized EAR baseline and blink-state tracking
+- closed-loop correction alerts with verified recovery
+- explicit signal-readiness states for tracking and baselines
+- live posture trends and local browser session history
+- configurable reminders and desktop notifications
+- installable macOS launcher and Windows shortcuts
+- automated macOS + Windows release bundles
 - professional CI and contribution workflow
-- configurable reminders and break prompts
-- installable macOS app launcher
-- Windows local installer and shortcuts
-- automated macOS + Windows GitHub Release bundles
 
 ## Near term
 
-- improved landmark quality/confidence reporting
-- camera/device selector
-- exportable session summaries
-- additional frontend tests
+- exportable **derived** session summaries for research/evaluation
+- reproducible benchmark script and labelled evaluation protocol
+- confidence-calibration analysis and reliability plots
+- additional frontend/component tests
+- accessibility audit, reduced-motion support and non-colour-only states
 - signed/notarized release packaging
 
 ## Product maturity
 
-- fully persistent local session database with explicit retention controls
-- accessible colour and reduced-motion options
-- configurable ergonomic thresholds and profiles
-- guided camera-position onboarding
+- persistent local session database with explicit retention controls
+- configurable ergonomic thresholds and saved profiles
+- optional side-view posture mode
+- research-session export with schema/version metadata
+- richer intervention analytics without overstating long-term behaviour change
 
 ## Research and architecture
 
-- dedicated side-view posture mode
-- evaluation dataset for threshold tuning
-- stronger confidence modelling around 2D approximations
+- evaluation dataset for threshold tuning and subgroup analysis
+- reference comparison for slouch / forward-head proxies
+- event-level blink validation across eyewear and lighting conditions
+- longitudinal validation of the prototype exposure indicator
+- controlled evaluation of intervention effectiveness
 - browser-native capture/inference for a truly hosted version
+
+See [Research gaps and validation plan](RESEARCH_GAPS.md) for the evidence plan and claims boundaries.
 
 ## Explicit non-goals for the current version
 
 - medical diagnosis
 - clinical posture assessment
+- exact spinal-curvature measurement
+- exact webcam-to-user distance measurement
 - hidden background recording
 - cloud video storage
 - multi-person monitoring
