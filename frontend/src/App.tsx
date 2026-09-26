@@ -11,6 +11,7 @@ import ReminderPanel from './components/ReminderPanel'
 import SessionHistory from './components/SessionHistory'
 import SessionPanel from './components/SessionPanel'
 import SetupGuide from './components/SetupGuide'
+import SignalReadiness from './components/SignalReadiness'
 import TrendChart from './components/TrendChart'
 import { usePostureSocket } from './hooks/usePostureSocket'
 import { api } from './services/api'
@@ -79,6 +80,7 @@ export default function App() {
       <main className="grid">
         <section className="grid-main">
           <PostureScore posture={posture} connected={connected} />
+          <SignalReadiness posture={posture} />
           <div className="insight-pair">
             <ExposurePanel posture={posture} />
             <OcularPanel posture={posture} />
