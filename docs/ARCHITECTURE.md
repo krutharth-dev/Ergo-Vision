@@ -24,15 +24,19 @@ This avoids frame starvation, inconsistent FPS and multiple OpenCV consumers com
 
 ### Separate ergonomic math
 
-Geometry, measurements, smoothing, classification and scoring are independent of FastAPI. That keeps the calculations unit-testable and allows the transport layer to evolve without rewriting the ergonomic model.
+Geometry, measurements, smoothing, classification, scoring, temporal exposure, ocular analysis and intervention state are independent of FastAPI. That keeps the calculations unit-testable and allows the transport layer to evolve without rewriting the ergonomic model.
+
+### Readiness before interpretation
+
+The pipeline exposes whether the required tracking and baselines are ready. Personal posture calibration, exposure baseline readiness and ocular warm-up are separate states from the final ergonomic outputs. LOW_CONFIDENCE does not accumulate exposure or verify an intervention.
 
 ### Local-first data flow
 
 The current deployment model intentionally runs both the camera pipeline and API on the user's computer. Raw frames are not sent to a remote inference service and are not persisted by ErgoVision.
 
-### In-memory session state
+### Local session state
 
-Session timing and posture aggregates are kept in memory. Closing the backend clears the session. Persistent history is intentionally outside the current scope.
+Backend session timing and posture aggregates are kept in memory and clear when the backend exits. The dashboard may retain completed summary rows in browser local storage; raw video is not part of that history.
 
 ## Backend modules
 
@@ -51,6 +55,9 @@ Session timing and posture aggregates are kept in memory. Closing the backend cl
 | `app/ergonomics/classifier.py` | GOOD/WARNING/BAD temporal classification |
 | `app/ergonomics/scoring.py` | weighted 0–100 score |
 | `app/ergonomics/feedback.py` | human-readable posture feedback |
+| `app/ergonomics/exposure.py` | confidence-weighted temporal exposure and session drift |
+| `app/ergonomics/ocular.py` | personalized EAR, blink and visual ergonomic indicators |
+| `app/ergonomics/intervention.py` | closed-loop correction and verified recovery state |
 | `app/session/tracker.py` | thread-safe session statistics |
 | `app/api/routes.py` | REST endpoints |
 | `app/api/websocket.py` | live posture WebSocket |
