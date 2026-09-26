@@ -40,6 +40,9 @@ export interface OcularInfo {
   blink_rate_per_min:number
   inter_blink_interval_seconds:number
   observation_seconds:number
+  baseline_observation_seconds:number
+  baseline_required_seconds:number
+  blink_ready:boolean
   visual_load:number
   proximity_drift:number
 }
@@ -53,6 +56,9 @@ export interface ExposureInfo {
   postural_drift:number
   baseline_risk:number
   recent_risk:number
+  baseline_ready:boolean
+  baseline_observation_seconds:number
+  baseline_required_seconds:number
   available:boolean
 }
 
