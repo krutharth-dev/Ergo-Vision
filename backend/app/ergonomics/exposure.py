@@ -24,6 +24,9 @@ class ExposureSnapshot:
     postural_drift: float = 0.0
     baseline_risk: float = 0.0
     recent_risk: float = 0.0
+    baseline_ready: bool = False
+    baseline_observation_seconds: float = 0.0
+    baseline_required_seconds: float = 10.0
     available: bool = False
 
     def as_dict(self) -> dict:
@@ -49,11 +52,13 @@ class ExposureEngine:
         self._dose = 0.0
         self._continuous_poor = 0.0
         self._last_timestamp: float | None = None
-        self._first_reliable_timestamp: float | None = None
         self._baseline_samples: list[float] = []
         self._baseline_risk: float | None = None
+        self._baseline_observation_seconds = 0.0
         self._history: deque[tuple[float, float]] = deque()
-        self._snapshot = ExposureSnapshot()
+        self._snapshot = ExposureSnapshot(
+            baseline_required_seconds=self.baseline_window_seconds,
+        )
 
     def update(
         self,
@@ -69,7 +74,7 @@ class ExposureEngine:
         if self._last_timestamp is None:
             self._last_timestamp = now
             if reliable:
-                self._record_risk(now, risk)
+                self._record_risk(now, risk, reliable_seconds=0.0)
             return self._make_snapshot(risk, confidence, reliable)
 
         dt = clamp(now - self._last_timestamp, 0.0, self.max_step_seconds)
@@ -88,7 +93,7 @@ class ExposureEngine:
         else:
             self._continuous_poor = 0.0
 
-        self._record_risk(now, risk)
+        self._record_risk(now, risk, reliable_seconds=dt)
         return self._make_snapshot(risk, confidence, True)
 
     def current(self) -> ExposureSnapshot:
@@ -98,20 +103,22 @@ class ExposureEngine:
         self._dose = 0.0
         self._continuous_poor = 0.0
         self._last_timestamp = None
-        self._first_reliable_timestamp = None
         self._baseline_samples = []
         self._baseline_risk = None
+        self._baseline_observation_seconds = 0.0
         self._history.clear()
-        self._snapshot = ExposureSnapshot()
+        self._snapshot = ExposureSnapshot(
+            baseline_required_seconds=self.baseline_window_seconds,
+        )
 
-    def _record_risk(self, now: float, risk: float) -> None:
-        if self._first_reliable_timestamp is None:
-            self._first_reliable_timestamp = now
-
-        elapsed = now - self._first_reliable_timestamp
+    def _record_risk(self, now: float, risk: float, reliable_seconds: float) -> None:
         if self._baseline_risk is None:
+            self._baseline_observation_seconds += max(0.0, reliable_seconds)
             self._baseline_samples.append(risk)
-            if elapsed >= self.baseline_window_seconds and self._baseline_samples:
+            if (
+                self._baseline_observation_seconds >= self.baseline_window_seconds
+                and self._baseline_samples
+            ):
                 self._baseline_risk = mean(self._baseline_samples)
 
         self._history.append((now, risk))
@@ -136,7 +143,13 @@ class ExposureEngine:
         if baseline is None and self._baseline_samples:
             baseline = mean(self._baseline_samples)
         baseline = baseline or 0.0
-        drift = clamp(recent_risk - baseline, -1.0, 1.0)
+
+        # Drift is only interpretable once the baseline window is complete.
+        drift = (
+            clamp(recent_risk - baseline, -1.0, 1.0)
+            if self._baseline_risk is not None
+            else 0.0
+        )
 
         if self._dose < 15:
             level = "LOW"
@@ -154,6 +167,9 @@ class ExposureEngine:
             postural_drift=round(drift, 4),
             baseline_risk=round(baseline, 4),
             recent_risk=round(recent_risk, 4),
+            baseline_ready=self._baseline_risk is not None,
+            baseline_observation_seconds=round(self._baseline_observation_seconds, 2),
+            baseline_required_seconds=round(self.baseline_window_seconds, 2),
             available=available,
         )
         return self._snapshot
