@@ -92,6 +92,7 @@ class PostureCurrent(BaseModel):
     intervention: InterventionInfo
     feedback: list[str]
     timestamp: str
+    posture_calibrated: bool
     person_detected: bool
 
 
