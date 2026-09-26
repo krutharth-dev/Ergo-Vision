@@ -14,11 +14,16 @@ Returns backend health, camera/model state, demo mode, uptime and capture FPS.
 
 ### `GET /api/posture/current`
 
-Returns score, status, measurements, feedback, timestamp and person detection state.
+Returns the ErgoVision Index, posture status, measurements, tracking confidence, personal-calibration state, ocular indicators, temporal exposure, intervention state, feedback, timestamp and person-detection state.
 
 Measurements include head tilt, shoulder alignment, neck offset, forward-head indicator, gaze, torso lean, torso geometry and the calibrated slouch indicator.
 
-Status values are `GOOD`, `WARNING`, `BAD` and `NO_PERSON`.
+Readiness metadata includes:
+- `posture_calibrated`
+- exposure `baseline_ready`, observed baseline seconds and required baseline seconds
+- ocular baseline observation/requirement fields and `blink_ready`
+
+Status values are `GOOD`, `WARNING`, `BAD`, `NO_PERSON` and `LOW_CONFIDENCE`. LOW_CONFIDENCE means current landmark quality is not reliable enough for ergonomic scoring.
 
 ## Calibration
 
@@ -38,7 +43,7 @@ Clears the saved calibration profile and returns to default heuristics.
 
 ### `GET /api/session/stats`
 
-Returns duration by posture state, percentages, counts, average/current score, longest poor-posture interval and whether session accounting is active.
+Returns duration by posture state, percentages, counts, average/current score, longest poor-posture interval, prototype exposure state, blink rate, intervention outcomes and whether session accounting is active.
 
 ### `POST /api/session/start`
 
