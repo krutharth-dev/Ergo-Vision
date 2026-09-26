@@ -45,11 +45,11 @@ export default function OcularPanel({ posture }: Props) {
         <div>
           <span>Proximity drift</span>
           <strong>
-            {baselineReady
+            {posture?.posture_calibrated
               ? (ocular.proximity_drift >= 0 ? '+' : '') +
                 Math.round(ocular.proximity_drift * 100) +
                 '%'
-              : 'Await baseline'}
+              : 'Calibrate posture'}
           </strong>
         </div>
         <div>
