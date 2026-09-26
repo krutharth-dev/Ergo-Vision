@@ -30,6 +30,8 @@ def test_personal_baseline_and_blink_detection():
     for i in range(12):
         engine.update(eye_landmarks(False), eye_confidence=1.0, timestamp=i * 0.1)
     assert engine.current().calibrated
+    assert engine.current().baseline_observation_seconds >= 1.0
+    assert engine.current().baseline_required_seconds == 1.0
 
     engine.update(eye_landmarks(True), eye_confidence=1.0, timestamp=1.2)
     engine.update(eye_landmarks(True), eye_confidence=1.0, timestamp=1.3)
@@ -41,3 +43,42 @@ def test_low_confidence_disables_measurement():
     engine = OcularEngine()
     snapshot = engine.update(eye_landmarks(False), eye_confidence=0.1, timestamp=0.0)
     assert not snapshot.available
+
+
+def test_eye_baseline_requires_contiguous_valid_observation():
+    engine = OcularEngine(baseline_seconds=1.0)
+
+    for i in range(5):
+        engine.update(eye_landmarks(False), eye_confidence=1.0, timestamp=i * 0.1)
+
+    interrupted = engine.update(
+        eye_landmarks(False),
+        eye_confidence=0.1,
+        timestamp=5.0,
+    )
+    assert not interrupted.calibrated
+    before_resume = interrupted.baseline_observation_seconds
+
+    resumed = engine.update(
+        eye_landmarks(False),
+        eye_confidence=1.0,
+        timestamp=5.1,
+    )
+    assert resumed.baseline_observation_seconds == before_resume
+    assert not resumed.calibrated
+
+
+def test_blink_readiness_is_explicit_after_warmup():
+    engine = OcularEngine(baseline_seconds=1.0)
+    for i in range(12):
+        engine.update(eye_landmarks(False), eye_confidence=1.0, timestamp=i * 0.1)
+
+    assert engine.current().calibrated
+    assert not engine.current().blink_ready
+
+    ready = engine.update(
+        eye_landmarks(False),
+        eye_confidence=1.0,
+        timestamp=15.1,
+    )
+    assert ready.blink_ready
