@@ -20,12 +20,16 @@ ErgoVision uses OpenCV and MediaPipe to estimate ergonomic posture indicators fr
 - Local webcam processing with no cloud inference
 - Face and pose landmark analysis with MediaPipe Tasks
 - Tracking-confidence gating so weak landmarks do not produce false GOOD scores
+- Explicit signal-readiness states for tracking, calibration and warm-up
 - Guided camera framing with head / shoulder / hip visibility checks
 - Runtime camera selection for built-in and external webcams
 - Head tilt, shoulder alignment, neck offset, forward-head, gaze and torso indicators
 - Calibrated slouch / hunch detection using shoulders, hips and relative pose depth
 - Personal neutral-posture calibration stored locally on the computer
-- 0–100 posture score with GOOD / WARNING / BAD states
+- Confidence-weighted temporal exposure with prototype risk-seconds and postural drift
+- Personalized EAR baseline, blink-rate tracking and relative-proximity indicators
+- Closed-loop correction alerts that clear only after reliably verified recovery
+- 0–100 ErgoVision Index with GOOD / WARNING / BAD states
 - Live annotated camera stream
 - Actionable posture feedback
 - Session timing, posture percentages, warning counts and average score
