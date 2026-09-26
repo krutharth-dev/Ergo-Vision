@@ -91,6 +91,7 @@ export interface PostureEvent {
   intervention:InterventionInfo
   feedback:string[]
   timestamp:string
+  posture_calibrated:boolean
   person_detected:boolean
 }
 
