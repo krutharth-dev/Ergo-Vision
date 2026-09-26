@@ -15,6 +15,7 @@ export default function SignalReadiness({ posture }: Props) {
   const ocular = posture?.ocular
 
   const trackingReady = Boolean(tracking?.reliable)
+  const postureReady = Boolean(posture?.posture_calibrated)
   const exposureReady = Boolean(exposure?.baseline_ready)
   const ocularReady = Boolean(ocular?.calibrated)
   const blinkReady = Boolean(ocular?.blink_ready)
@@ -39,7 +40,8 @@ export default function SignalReadiness({ posture }: Props) {
         <div>
           <div className="card-title">Signal Readiness</div>
           <p className="readiness-intro">
-            ErgoVision separates signal quality from ergonomic interpretation.
+            ErgoVision separates signal quality, personal baselines and
+            ergonomic interpretation.
           </p>
         </div>
         <span className="evidence-pill">PROTOTYPE EVIDENCE</span>
@@ -64,6 +66,28 @@ export default function SignalReadiness({ posture }: Props) {
           <p>
             {Math.round((tracking?.confidence ?? 0) * 100)}% confidence ·{' '}
             {tracking?.quality ?? 'WAITING'}
+          </p>
+        </div>
+
+        <div className={'readiness-item ' + (postureReady ? 'ready' : 'waiting')}>
+          <div className="readiness-heading">
+            <span>Personal posture</span>
+            <strong>{postureReady ? 'CALIBRATED' : 'DEFAULT'}</strong>
+          </div>
+          <div
+            className="readiness-progress"
+            role="progressbar"
+            aria-label="Personal posture calibration"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={postureReady ? 100 : 0}
+          >
+            <span style={{ width: postureReady ? '100%' : '0%' }} />
+          </div>
+          <p>
+            {postureReady
+              ? 'Slouch and proximity signals use your neutral posture.'
+              : 'Calibrate upright posture before interpreting personal drift.'}
           </p>
         </div>
 
