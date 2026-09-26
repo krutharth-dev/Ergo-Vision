@@ -261,7 +261,7 @@ class PosturePipeline:
             "intervention": intervention.as_dict(),
             "feedback": feedback,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "person_detected": measurements.person_detected,
+            "posture_calibrated": self.calibration.calibrated,\n            "person_detected": measurements.person_detected,
         }
 
     def get_current(self) -> dict:
