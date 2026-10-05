@@ -50,9 +50,9 @@ class FeedbackEngine:
             messages.append(("WARNING", f"Your head is slightly to the {direction}. Try to center it over your spine."))
 
         if measurement.forward_head_indicator >= FORWARD_HEAD_BAD:
-            messages.append(("BAD", "Your head is jutting forward. Pull your head back over your shoulders."))
+            messages.append(("BAD", "You have moved too far toward the screen. Sit back and bring your head over your shoulders."))
         elif measurement.forward_head_indicator >= FORWARD_HEAD_WARNING:
-            messages.append(("WARNING", "Your head is leaning forward slightly. Tuck your chin and sit back."))
+            messages.append(("WARNING", "You are moving closer to the screen than your calibrated position. Sit back slightly and re-center your head."))
 
         if not messages:
             if status == "GOOD":
