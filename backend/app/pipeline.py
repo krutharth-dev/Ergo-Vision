@@ -154,6 +154,7 @@ class PosturePipeline:
                 "gaze_vertical_degrees": round(measurements.gaze_vertical_degrees, 1),
                 "torso_lean_degrees": round(measurements.torso_lean_degrees, 1),
                 "torso_length_ratio": round(measurements.torso_length_ratio, 3),
+                "torso_vertical_ratio": round(measurements.torso_vertical_ratio, 3),
                 "head_shoulder_gap_ratio": round(measurements.head_shoulder_gap_ratio, 3),
                 "torso_depth_ratio": round(measurements.torso_depth_ratio, 3),
                 "slouch_indicator": round(measurements.slouch_indicator, 3),
