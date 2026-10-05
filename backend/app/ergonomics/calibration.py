@@ -12,7 +12,7 @@ from .measurements import ErgonomicMeasurements
 
 DATA_DIR = Path(os.environ.get("ERGOVISION_DATA_DIR", str(Path.home() / ".ergovision")))
 CALIBRATION_PATH = DATA_DIR / "calibration.json"
-CALIBRATION_VERSION = 5
+CALIBRATION_VERSION = 6
 
 
 @dataclass
@@ -25,6 +25,7 @@ class CalibrationProfile:
     head_shoulder_gap_ratio: float = 0.0
     torso_depth_ratio: float = 0.0
     forward_head_indicator: float = 0.0
+    face_scale: float = 0.0
     shoulder_alignment_degrees: float = 0.0
     samples: int = 0
 
@@ -59,6 +60,7 @@ class CalibrationProfile:
         gaps = [s.head_shoulder_gap_ratio for s in valid if s.head_shoulder_gap_ratio > 0]
         depths = [s.torso_depth_ratio for s in valid]
         forward = [s.forward_head_indicator for s in valid]
+        face_scales = [s.face_scale for s in valid if s.face_scale > 0]
         shoulders = [s.shoulder_alignment_degrees for s in valid]
 
         # Learn this user's own upright proportions. Do not reject calibration
@@ -68,6 +70,7 @@ class CalibrationProfile:
             or _relative_variation(vertical) > 0.08
             or (gaps and _relative_variation(gaps) > 0.10)
             or pstdev(forward) > 0.10
+            or (face_scales and _relative_variation(face_scales) > 0.08)
             or pstdev(shoulders) > 2.5
         ):
             raise ValueError(
@@ -82,6 +85,7 @@ class CalibrationProfile:
         self.head_shoulder_gap_ratio = mean(gaps) if gaps else 0.0
         self.torso_depth_ratio = mean(depths)
         self.forward_head_indicator = mean(forward)
+        self.face_scale = mean(face_scales) if face_scales else 0.0
         # Natural shoulder asymmetry is part of the user's neutral baseline.
         # We care about change from this posture, not perfect anatomical symmetry.
         self.shoulder_alignment_degrees = mean(shoulders)
@@ -97,6 +101,7 @@ class CalibrationProfile:
         self.head_shoulder_gap_ratio = 0.0
         self.torso_depth_ratio = 0.0
         self.forward_head_indicator = 0.0
+        self.face_scale = 0.0
         self.shoulder_alignment_degrees = 0.0
         self.samples = 0
         try:
@@ -130,11 +135,18 @@ class CalibrationProfile:
         )
         forward_severity = clamp(forward_delta / 0.18, 0.0, 1.0)
 
+        proximity_severity = 0.0
+        if self.face_scale > 1e-6 and measurement.face_scale > 0:
+            relative_growth = (measurement.face_scale / self.face_scale) - 1.0
+            # Roughly 12% larger than the calibrated face size reaches WARNING
+            # and ~16% reaches BAD using the existing 0.6 / 0.8 thresholds.
+            proximity_severity = clamp(relative_growth / 0.20, 0.0, 1.0)
+
         return replace(
             measurement,
             shoulder_alignment_degrees=shoulder_delta,
             shoulder_alignment_score=shoulder_score,
-            forward_head_indicator=forward_severity,
+            forward_head_indicator=max(forward_severity, proximity_severity),
         )
 
     def slouch_indicator(self, measurement: ErgonomicMeasurements) -> float:
