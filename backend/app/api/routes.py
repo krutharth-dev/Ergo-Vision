@@ -13,6 +13,8 @@ from .schemas import (
     ConfigResponse,
     HealthResponse,
     PostureCurrent,
+    ReminderSettingsRequest,
+    ReminderSettingsResponse,
     SessionStatsResponse,
 )
 
@@ -88,7 +90,7 @@ def calibration_status():
 def calibration_capture():
     pipe = _require_pipeline()
     try:
-        return CalibrationResponse(**pipe.capture_calibration())
+        return CalibrationResponse(**pipe.capture_calibration(duration_seconds=5.0))
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -137,4 +139,21 @@ def get_config():
         frame_height=config.FRAME_HEIGHT,
         target_fps=config.TARGET_FPS,
         demo_mode=config.DEMO_MODE,
+    )
+
+
+@router.get("/api/reminders", response_model=ReminderSettingsResponse)
+def reminder_settings():
+    return ReminderSettingsResponse(**_require_pipeline().get_reminder_settings())
+
+
+@router.post("/api/reminders", response_model=ReminderSettingsResponse)
+def reminder_settings_update(request: ReminderSettingsRequest):
+    pipe = _require_pipeline()
+    return ReminderSettingsResponse(
+        **pipe.configure_reminders(
+            enabled=request.enabled,
+            poor_posture_seconds=request.poor_posture_seconds,
+            movement_break_minutes=request.movement_break_minutes,
+        )
     )
