@@ -37,7 +37,7 @@ async def websocket_endpoint(websocket: WebSocket):
             active_connections.discard(websocket)
             if not active_connections:
                 pipeline = get_pipeline()
-                if pipeline is not None:
+                if pipeline is not None and not pipeline.background_monitoring_enabled:
                     await asyncio.to_thread(pipeline.deactivate_camera)
 
 
@@ -59,5 +59,5 @@ async def broadcast(event: dict):
             if not active_connections:
                 from ..main import get_pipeline
                 pipeline = get_pipeline()
-                if pipeline is not None:
+                if pipeline is not None and not pipeline.background_monitoring_enabled:
                     await asyncio.to_thread(pipeline.deactivate_camera)
