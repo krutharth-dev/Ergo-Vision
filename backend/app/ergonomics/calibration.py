@@ -47,10 +47,10 @@ class CalibrationProfile:
             and s.torso_length_ratio > 0
             and s.torso_vertical_ratio > 0
         ]
-        if len(valid) < 20:
+        if len(valid) < 15:
             raise ValueError(
-                "Calibration needs a stable view of your head, shoulders and hips. "
-                "Hold an upright posture for 2–3 seconds and try again."
+                "Not enough reliable calibration frames were captured. "
+                "Keep your head, shoulders and hips visible and hold your upright posture for the full 5 seconds."
             )
 
         torso = [s.torso_length_ratio for s in valid]
