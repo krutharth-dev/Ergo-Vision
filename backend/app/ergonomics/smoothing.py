@@ -27,6 +27,7 @@ class SmoothingBuffer:
             shoulder_alignment_degrees=a * new.shoulder_alignment_degrees + (1 - a) * prev.shoulder_alignment_degrees,
             neck_offset=a * new.neck_offset + (1 - a) * prev.neck_offset,
             forward_head_indicator=a * new.forward_head_indicator + (1 - a) * prev.forward_head_indicator,
+            face_scale=a * new.face_scale + (1 - a) * prev.face_scale,
             gaze_vertical_degrees=a * new.gaze_vertical_degrees + (1 - a) * prev.gaze_vertical_degrees,
             torso_lean_degrees=a * new.torso_lean_degrees + (1 - a) * prev.torso_lean_degrees,
             torso_length_ratio=a * new.torso_length_ratio + (1 - a) * prev.torso_length_ratio,
