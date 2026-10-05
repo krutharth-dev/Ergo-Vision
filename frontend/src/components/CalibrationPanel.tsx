@@ -77,14 +77,15 @@ export default function CalibrationPanel({ posture }: Props) {
       </div>
 
       <p className="muted calibration-copy">
-        Press calibrate, then hold your normal upright posture for the full 5 seconds. FAIR or EXCELLENT
-        tracking is accepted as long as your head, shoulders and hips remain visible.
+        Press calibrate, then hold your normal comfortable upright posture for the full 5 seconds. FAIR
+        or EXCELLENT tracking is accepted. A slight natural shoulder imbalance is completely okay — it
+        becomes part of your personal baseline instead of being treated as bad posture.
       </p>
 
       {!ready && (
         <p className="calibration-meta">
-          Move back until your hips are visible and tracking is reliable. Calibration no longer requires
-          EXCELLENT quality.
+          Move back until your hips are visible and tracking is reliable. Your posture can be GOOD or
+          slightly imbalanced; symmetry is not required for calibration.
         </p>
       )}
 
@@ -108,7 +109,7 @@ export default function CalibrationPanel({ posture }: Props) {
 
       {profile?.calibrated && profile.captured_at && (
         <p className="calibration-meta">
-          Saved locally · {new Date(profile.captured_at).toLocaleString()} · {profile.samples} samples
+          Saved locally · {new Date(profile.captured_at).toLocaleString()} · {profile.samples} samples · natural shoulder baseline {profile.shoulder_alignment_degrees.toFixed(1)}°
         </p>
       )}
 
