@@ -63,6 +63,7 @@ class CalibrationResponse(BaseModel):
     head_shoulder_gap_ratio: float
     torso_depth_ratio: float
     forward_head_indicator: float
+    shoulder_alignment_degrees: float
     samples: int
 
 
