@@ -10,6 +10,7 @@ class Measurements(BaseModel):
     gaze_vertical_degrees: float
     torso_lean_degrees: float
     torso_length_ratio: float
+    torso_vertical_ratio: float
     head_shoulder_gap_ratio: float
     torso_depth_ratio: float
     slouch_indicator: float
@@ -54,9 +55,11 @@ class SessionStatsResponse(BaseModel):
 
 
 class CalibrationResponse(BaseModel):
+    version: int
     calibrated: bool
     captured_at: str | None
     torso_length_ratio: float
+    torso_vertical_ratio: float
     head_shoulder_gap_ratio: float
     torso_depth_ratio: float
     forward_head_indicator: float
@@ -115,3 +118,17 @@ class HealthResponse(BaseModel):
     demo_mode: bool
     uptime_seconds: float
     fps: float
+
+
+class ReminderSettingsRequest(BaseModel):
+    enabled: bool
+    poor_posture_seconds: int = Field(ge=10, le=1800)
+    movement_break_minutes: int = Field(ge=1, le=30)
+
+
+class ReminderSettingsResponse(BaseModel):
+    enabled: bool
+    poor_posture_seconds: int
+    movement_break_minutes: int
+    background_monitoring: bool
+    last_reminder: str
