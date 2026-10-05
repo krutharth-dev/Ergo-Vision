@@ -119,19 +119,23 @@ class PosturePipeline:
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
             if tracking.reliable and tracking.hips_visible and smoothed.person_detected:
+                # Keep raw measurements for calibration so the baseline learns
+                # the user's real neutral posture, including natural asymmetry.
                 self._recent_measurements.append(smoothed)
-            smoothed.slouch_indicator = self.calibration.slouch_indicator(smoothed)
+
+            evaluated = self.calibration.apply_personal_baseline(smoothed)
+            evaluated.slouch_indicator = self.calibration.slouch_indicator(smoothed)
 
             if not tracking.reliable:
                 status = "LOW_CONFIDENCE"
                 score = 0
             else:
-                status = self.classifier.classify(smoothed)
-                score, _breakdown = compute_score(smoothed)
+                status = self.classifier.classify(evaluated)
+                score, _breakdown = compute_score(evaluated)
             encoded, jpeg = cv2.imencode(".jpg", annotated)
 
             with self._lock:
-                self._current_measurements = smoothed
+                self._current_measurements = evaluated
                 self._current_tracking = tracking
                 self._current_status = status
                 self._current_score = score
@@ -140,8 +144,8 @@ class PosturePipeline:
 
             tracker_status = "NO_PERSON" if status == "LOW_CONFIDENCE" else status
             self.tracker.update(tracker_status, score)
-            self._maybe_remind(status, smoothed)
-            self._maybe_emit(status, smoothed, score, tracking)
+            self._maybe_remind(status, evaluated)
+            self._maybe_emit(status, evaluated, score, tracking)
 
     def _maybe_emit(self, status, measurements, score, tracking):
         now = time.time()
