@@ -12,7 +12,7 @@ from .measurements import ErgonomicMeasurements
 
 DATA_DIR = Path(os.environ.get("ERGOVISION_DATA_DIR", str(Path.home() / ".ergovision")))
 CALIBRATION_PATH = DATA_DIR / "calibration.json"
-CALIBRATION_VERSION = 6
+CALIBRATION_VERSION = 7
 
 
 @dataclass
@@ -20,13 +20,11 @@ class CalibrationProfile:
     version: int = CALIBRATION_VERSION
     calibrated: bool = False
     captured_at: str | None = None
-    torso_length_ratio: float = 0.0
-    torso_vertical_ratio: float = 0.0
-    head_shoulder_gap_ratio: float = 0.0
-    torso_depth_ratio: float = 0.0
-    forward_head_indicator: float = 0.0
-    face_scale: float = 0.0
+    head_tilt_degrees: float = 0.0
     shoulder_alignment_degrees: float = 0.0
+    neck_offset: float = 0.0
+    head_shoulder_gap_ratio: float = 0.0
+    forward_head_indicator: float = 0.0
     samples: int = 0
 
     @classmethod
@@ -34,8 +32,6 @@ class CalibrationProfile:
         try:
             data = json.loads(CALIBRATION_PATH.read_text(encoding="utf-8"))
             if data.get("version") != CALIBRATION_VERSION:
-                # Older profiles were created with absolute body-proportion assumptions
-                # that could incorrectly label an upright person as slouching.
                 return cls()
             return cls(**data)
         except (OSError, ValueError, TypeError):
@@ -43,52 +39,42 @@ class CalibrationProfile:
 
     def capture(self, samples: list[ErgonomicMeasurements]) -> None:
         valid = [
-            s
-            for s in samples
-            if s.person_detected
-            and s.torso_length_ratio > 0
-            and s.torso_vertical_ratio > 0
+            sample
+            for sample in samples
+            if sample.person_detected
+            and sample.head_shoulder_gap_ratio > 0
         ]
         if len(valid) < 15:
             raise ValueError(
-                "Not enough reliable calibration frames were captured. "
-                "Keep your head, shoulders and hips visible and hold your upright posture for the full 5 seconds."
+                "Not enough reliable head-and-shoulder frames were captured. "
+                "Keep your full head and both shoulders visible for the full 5 seconds."
             )
 
-        torso = [s.torso_length_ratio for s in valid]
-        vertical = [s.torso_vertical_ratio for s in valid]
-        gaps = [s.head_shoulder_gap_ratio for s in valid if s.head_shoulder_gap_ratio > 0]
-        depths = [s.torso_depth_ratio for s in valid]
-        forward = [s.forward_head_indicator for s in valid]
-        face_scales = [s.face_scale for s in valid if s.face_scale > 0]
+        head_tilts = [s.head_tilt_degrees for s in valid]
         shoulders = [s.shoulder_alignment_degrees for s in valid]
+        neck_offsets = [s.neck_offset for s in valid]
+        gaps = [s.head_shoulder_gap_ratio for s in valid]
+        forward = [s.forward_head_indicator for s in valid]
 
-        # Learn this user's own upright proportions. Do not reject calibration
-        # against a generic body-shape template.
         if (
-            _relative_variation(torso) > 0.08
-            or _relative_variation(vertical) > 0.08
-            or (gaps and _relative_variation(gaps) > 0.10)
-            or pstdev(forward) > 0.10
-            or (face_scales and _relative_variation(face_scales) > 0.08)
+            pstdev(head_tilts) > 2.5
             or pstdev(shoulders) > 2.5
+            or pstdev(neck_offsets) > 0.08
+            or _relative_variation(gaps) > 0.12
+            or pstdev(forward) > 0.10
         ):
             raise ValueError(
-                "Too much movement was detected. Hold still and try calibration again."
+                "Too much movement was detected. Hold your normal comfortable posture still and try again."
             )
 
         self.version = CALIBRATION_VERSION
         self.calibrated = True
         self.captured_at = datetime.now(timezone.utc).isoformat()
-        self.torso_length_ratio = mean(torso)
-        self.torso_vertical_ratio = mean(vertical)
-        self.head_shoulder_gap_ratio = mean(gaps) if gaps else 0.0
-        self.torso_depth_ratio = mean(depths)
-        self.forward_head_indicator = mean(forward)
-        self.face_scale = mean(face_scales) if face_scales else 0.0
-        # Natural shoulder asymmetry is part of the user's neutral baseline.
-        # We care about change from this posture, not perfect anatomical symmetry.
+        self.head_tilt_degrees = mean(head_tilts)
         self.shoulder_alignment_degrees = mean(shoulders)
+        self.neck_offset = mean(neck_offsets)
+        self.head_shoulder_gap_ratio = mean(gaps)
+        self.forward_head_indicator = mean(forward)
         self.samples = len(valid)
         self.save()
 
@@ -96,13 +82,11 @@ class CalibrationProfile:
         self.version = CALIBRATION_VERSION
         self.calibrated = False
         self.captured_at = None
-        self.torso_length_ratio = 0.0
-        self.torso_vertical_ratio = 0.0
-        self.head_shoulder_gap_ratio = 0.0
-        self.torso_depth_ratio = 0.0
-        self.forward_head_indicator = 0.0
-        self.face_scale = 0.0
+        self.head_tilt_degrees = 0.0
         self.shoulder_alignment_degrees = 0.0
+        self.neck_offset = 0.0
+        self.head_shoulder_gap_ratio = 0.0
+        self.forward_head_indicator = 0.0
         self.samples = 0
         try:
             CALIBRATION_PATH.unlink(missing_ok=True)
@@ -116,102 +100,61 @@ class CalibrationProfile:
         temp.replace(CALIBRATION_PATH)
 
     def apply_personal_baseline(self, measurement: ErgonomicMeasurements) -> ErgonomicMeasurements:
-        """Return posture measurements normalized to the user's calibrated neutral pose."""
         if not self.calibrated:
             return replace(measurement)
 
+        head_tilt_delta = max(0.0, measurement.head_tilt_degrees - self.head_tilt_degrees)
         shoulder_delta = max(
             0.0,
             measurement.shoulder_alignment_degrees - self.shoulder_alignment_degrees,
         )
-        shoulder_score = max(0.0, 1.0 - shoulder_delta / 20.0)
+        neck_delta = measurement.neck_offset - self.neck_offset
 
-        # Convert forward-head movement into a personal 0..1 severity score.
-        # A roughly 0.11 increase over the calibrated value reaches WARNING
-        # and ~0.14 reaches BAD with the existing 0.6 / 0.8 thresholds.
         forward_delta = max(
             0.0,
             measurement.forward_head_indicator - self.forward_head_indicator,
         )
         forward_severity = clamp(forward_delta / 0.18, 0.0, 1.0)
 
-        proximity_severity = 0.0
-        if self.face_scale > 1e-6 and measurement.face_scale > 0:
-            relative_growth = (measurement.face_scale / self.face_scale) - 1.0
-            # Roughly 12% larger than the calibrated face size reaches WARNING
-            # and ~16% reaches BAD using the existing 0.6 / 0.8 thresholds.
-            proximity_severity = clamp(relative_growth / 0.20, 0.0, 1.0)
-
+        # After personal calibration, hip/torso measurements are intentionally
+        # excluded from posture classification. Head + shoulders only.
         return replace(
             measurement,
+            head_tilt_degrees=head_tilt_delta,
             shoulder_alignment_degrees=shoulder_delta,
-            shoulder_alignment_score=shoulder_score,
-            forward_head_indicator=max(forward_severity, proximity_severity),
+            shoulder_alignment_score=max(0.0, 1.0 - shoulder_delta / 20.0),
+            neck_offset=neck_delta,
+            forward_head_indicator=forward_severity,
+            torso_lean_degrees=0.0,
+            torso_length_ratio=0.0,
+            torso_vertical_ratio=0.0,
+            torso_depth_ratio=0.0,
         )
 
     def slouch_indicator(self, measurement: ErgonomicMeasurements) -> float:
-        # Slouch is relative to a person's normal upright posture. Before
-        # calibration, do not infer it from absolute body proportions.
+        """Head-and-shoulder-only hunch signal relative to the personal baseline."""
         if not self.calibrated:
             return 0.0
 
         signals: list[float] = []
 
-        if self.torso_vertical_ratio > 0 and measurement.torso_vertical_ratio > 0:
-            vertical_drop = self.torso_vertical_ratio - measurement.torso_vertical_ratio
-            # Vertical shoulder-to-hip compression is the most reliable
-            # front-camera cue for chest collapse / hunching.
+        if self.head_shoulder_gap_ratio > 0 and measurement.head_shoulder_gap_ratio > 0:
+            gap_drop = self.head_shoulder_gap_ratio - measurement.head_shoulder_gap_ratio
             signals.append(
                 clamp(
-                    vertical_drop / max(self.torso_vertical_ratio * 0.16, 0.10),
+                    gap_drop / max(self.head_shoulder_gap_ratio * 0.24, 0.14),
                     0.0,
                     1.0,
                 )
             )
 
-        if self.torso_length_ratio > 0 and measurement.torso_length_ratio > 0:
-            drop = self.torso_length_ratio - measurement.torso_length_ratio
-            signals.append(
-                clamp(
-                    drop / max(self.torso_length_ratio * 0.24, 0.22),
-                    0.0,
-                    1.0,
-                )
-            )
-
-            depth_change = measurement.torso_depth_ratio - self.torso_depth_ratio
-            signals.append(clamp(depth_change / 0.55, 0.0, 1.0))
-
-        if (
-            self.head_shoulder_gap_ratio > 0
-            and measurement.head_shoulder_gap_ratio > 0
-        ):
-            gap_drop = (
-                self.head_shoulder_gap_ratio - measurement.head_shoulder_gap_ratio
-            )
-            signals.append(
-                clamp(
-                    gap_drop / max(self.head_shoulder_gap_ratio * 0.28, 0.18),
-                    0.0,
-                    1.0,
-                )
-            )
-
-        forward_change = (
-            measurement.forward_head_indicator - self.forward_head_indicator
+        forward_change = max(
+            0.0,
+            measurement.forward_head_indicator - self.forward_head_indicator,
         )
-        signals.append(clamp(forward_change / 0.35, 0.0, 1.0))
+        signals.append(clamp(forward_change / 0.20, 0.0, 1.0))
 
-        # Webcam landmarks can jitter, but a front-facing slouch may mainly
-        # appear as depth change. Let one strong signal produce a warning while
-        # keeping BAD posture dependent on corroboration from another signal.
-        if not signals:
-            return 0.0
-
-        ordered = sorted(signals, reverse=True)
-        strongest = ordered[0]
-        second = ordered[1] if len(ordered) > 1 else 0.0
-        return clamp(0.55 * strongest + 0.45 * second, 0.0, 1.0)
+        return max(signals, default=0.0)
 
     def as_dict(self) -> dict:
         return asdict(self)
