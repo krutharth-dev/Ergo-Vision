@@ -139,13 +139,16 @@ class CalibrationProfile:
         )
         signals.append(clamp(forward_change / 0.35, 0.0, 1.0))
 
-        # Webcam landmarks can jitter. A strong slouch verdict now needs a
-        # second signal to corroborate the strongest one.
-        if len(signals) < 2:
+        # Webcam landmarks can jitter, but a front-facing slouch may mainly
+        # appear as depth change. Let one strong signal produce a warning while
+        # keeping BAD posture dependent on corroboration from another signal.
+        if not signals:
             return 0.0
 
-        strongest, second = sorted(signals, reverse=True)[:2]
-        return clamp(0.30 * strongest + 0.70 * second, 0.0, 1.0)
+        ordered = sorted(signals, reverse=True)
+        strongest = ordered[0]
+        second = ordered[1] if len(ordered) > 1 else 0.0
+        return clamp(0.55 * strongest + 0.45 * second, 0.0, 1.0)
 
     def as_dict(self) -> dict:
         return asdict(self)
