@@ -5,7 +5,7 @@ from app.ergonomics.calibration import CalibrationProfile
 from app.ergonomics.measurements import ErgonomicMeasurements
 
 
-def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2, shoulder=0.0):
+def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2, face=0.14, shoulder=0.0):
     return ErgonomicMeasurements(
         person_detected=True,
         torso_length_ratio=torso,
@@ -13,6 +13,7 @@ def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2, should
         head_shoulder_gap_ratio=gap,
         torso_depth_ratio=depth,
         forward_head_indicator=forward,
+        face_scale=face,
         shoulder_alignment_degrees=shoulder,
     )
 
@@ -149,3 +150,20 @@ def test_forward_head_is_relative_to_personal_baseline(tmp_path: Path, monkeypat
     assert neutral.forward_head_indicator == 0.0
     assert warning.forward_head_indicator >= 0.60
     assert bad.forward_head_indicator >= 0.80
+
+
+
+def test_whole_body_move_toward_screen_triggers_forward_warning(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement(face=0.14) for _ in range(20)])
+
+    neutral = profile.apply_personal_baseline(measurement(face=0.14))
+    closer = profile.apply_personal_baseline(measurement(face=0.162))
+    much_closer = profile.apply_personal_baseline(measurement(face=0.168))
+
+    assert neutral.forward_head_indicator == 0.0
+    assert closer.forward_head_indicator >= 0.60
+    assert much_closer.forward_head_indicator >= 0.80
