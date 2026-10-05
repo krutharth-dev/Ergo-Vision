@@ -118,9 +118,8 @@ class PosturePipeline:
             tracking = assess_tracking(landmarks)
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
-            if tracking.reliable and tracking.hips_visible and smoothed.person_detected:
-                # Keep raw measurements for calibration so the baseline learns
-                # the user's real neutral posture, including natural asymmetry.
+            if tracking.reliable and tracking.head_visible and tracking.shoulders_visible and smoothed.person_detected:
+                # Calibration uses head + shoulders only. Hip visibility is not required.
                 self._recent_measurements.append(smoothed)
 
             evaluated = self.calibration.apply_personal_baseline(smoothed)
