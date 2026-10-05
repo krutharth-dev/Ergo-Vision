@@ -30,6 +30,7 @@ class SmoothingBuffer:
             gaze_vertical_degrees=a * new.gaze_vertical_degrees + (1 - a) * prev.gaze_vertical_degrees,
             torso_lean_degrees=a * new.torso_lean_degrees + (1 - a) * prev.torso_lean_degrees,
             torso_length_ratio=a * new.torso_length_ratio + (1 - a) * prev.torso_length_ratio,
+            torso_vertical_ratio=a * new.torso_vertical_ratio + (1 - a) * prev.torso_vertical_ratio,
             head_shoulder_gap_ratio=a * new.head_shoulder_gap_ratio + (1 - a) * prev.head_shoulder_gap_ratio,
             torso_depth_ratio=a * new.torso_depth_ratio + (1 - a) * prev.torso_depth_ratio,
             slouch_indicator=a * new.slouch_indicator + (1 - a) * prev.slouch_indicator,
