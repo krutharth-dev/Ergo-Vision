@@ -17,6 +17,7 @@ class ErgonomicMeasurements:
     shoulder_alignment_degrees: float = 0.0
     neck_offset: float = 0.0
     forward_head_indicator: float = 0.0
+    face_scale: float = 0.0
     gaze_vertical_degrees: float = 0.0
     torso_lean_degrees: float = 0.0
     torso_length_ratio: float = 0.0
@@ -46,6 +47,7 @@ def compute_measurements(landmarks: LandmarkSet | None) -> ErgonomicMeasurements
 
     if has_face:
         measurements.head_tilt_degrees = _compute_head_tilt(landmarks)
+        measurements.face_scale = _compute_face_scale(landmarks)
         measurements.gaze_vertical_degrees = _compute_gaze_vertical(landmarks)
 
     if has_face and has_shoulders:
@@ -135,6 +137,16 @@ def _compute_forward_head(landmarks: LandmarkSet) -> float:
     # calibration decides what "too far forward" means for this user.
     ratio = face_height / shoulder_width
     return clamp(ratio, 0.0, 2.0)
+
+
+def _compute_face_scale(landmarks: LandmarkSet) -> float:
+    chin = landmarks.get_pos("chin")
+    forehead = landmarks.get_pos("forehead")
+    if chin is None or forehead is None:
+        return 0.0
+    # Landmarks are normalized to image height, so this rises as the user's
+    # face moves closer to the camera even if the whole upper body moves too.
+    return clamp(abs(chin[1] - forehead[1]), 0.0, 1.0)
 
 
 def _compute_gaze_vertical(landmarks: LandmarkSet) -> float:
