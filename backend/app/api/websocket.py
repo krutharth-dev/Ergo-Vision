@@ -24,10 +24,22 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
+            # Listen for client disconnects as well as sending updates. If the
+            # server only writes, Starlette may not notice a closed dashboard
+            # promptly and the camera can remain open unnecessarily.
+            try:
+                message = await asyncio.wait_for(
+                    websocket.receive(),
+                    timeout=WEBSOCKET_UPDATE_INTERVAL,
+                )
+                if message.get("type") == "websocket.disconnect":
+                    break
+            except asyncio.TimeoutError:
+                pass
+
             pipeline = get_pipeline()
             if pipeline is not None:
                 await websocket.send_json(pipeline.get_current())
-            await asyncio.sleep(WEBSOCKET_UPDATE_INTERVAL)
     except (WebSocketDisconnect, RuntimeError):
         pass
     except Exception:
