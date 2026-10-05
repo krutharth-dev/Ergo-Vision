@@ -5,7 +5,7 @@ from app.ergonomics.calibration import CalibrationProfile
 from app.ergonomics.measurements import ErgonomicMeasurements
 
 
-def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2):
+def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2, shoulder=0.0):
     return ErgonomicMeasurements(
         person_detected=True,
         torso_length_ratio=torso,
@@ -13,6 +13,7 @@ def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2):
         head_shoulder_gap_ratio=gap,
         torso_depth_ratio=depth,
         forward_head_indicator=forward,
+        shoulder_alignment_degrees=shoulder,
     )
 
 
@@ -104,3 +105,30 @@ def test_vertical_compression_alone_can_trigger_slouch_warning(tmp_path: Path, m
 
     compressed = measurement(vertical=1.30)
     assert profile.slouch_indicator(compressed) >= 0.35
+
+
+
+def test_calibration_accepts_stable_natural_shoulder_asymmetry(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement(shoulder=7.0) for _ in range(20)])
+
+    assert profile.calibrated
+    assert abs(profile.shoulder_alignment_degrees - 7.0) < 0.01
+
+    neutral = profile.apply_personal_baseline(measurement(shoulder=7.0))
+    assert neutral.shoulder_alignment_degrees == 0.0
+    assert neutral.shoulder_alignment_score == 1.0
+
+
+def test_only_extra_shoulder_imbalance_is_penalized(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement(shoulder=6.0) for _ in range(20)])
+
+    slightly_more_uneven = profile.apply_personal_baseline(measurement(shoulder=9.0))
+    assert abs(slightly_more_uneven.shoulder_alignment_degrees - 3.0) < 0.01
