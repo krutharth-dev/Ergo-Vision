@@ -34,7 +34,8 @@ export default function Metrics({ posture, config }: Props) {
       <div className="card-title">Ergonomic Metrics</div>
       <table className="metrics-table">
         <tbody>
-          <tr><td>Slouch / Hunch</td><td>{SLOUCH_LABEL(measurement.slouch_indicator, config)}</td></tr>
+          <tr><td>Slouch / Hunch</td><td>{SLOUCH_LABEL(measurement.slouch_indicator, config)} ({measurement.slouch_indicator.toFixed(2)})</td></tr>
+          <tr><td>Torso Compression</td><td>{measurement.torso_vertical_ratio.toFixed(2)}</td></tr>
           <tr><td>Torso Lean</td><td>{measurement.torso_lean_degrees.toFixed(1)}°</td></tr>
           <tr><td>Head Tilt</td><td>{measurement.head_tilt_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Angle</td><td>{measurement.shoulder_alignment_degrees.toFixed(1)}°</td></tr>
