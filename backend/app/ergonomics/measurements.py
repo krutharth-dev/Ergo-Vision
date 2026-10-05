@@ -131,8 +131,10 @@ def _compute_forward_head(landmarks: LandmarkSet) -> float:
     face_height = abs(chin[1] - forehead[1]) if forehead else 0.0
     if face_height < 1e-6:
         face_height = abs(chin[1] - nose[1]) * 2.0
+    # Preserve the raw face-to-shoulder scale relationship. Personal
+    # calibration decides what "too far forward" means for this user.
     ratio = face_height / shoulder_width
-    return clamp((ratio - 0.4) / 0.8, 0.0, 1.0)
+    return clamp(ratio, 0.0, 2.0)
 
 
 def _compute_gaze_vertical(landmarks: LandmarkSet) -> float:
