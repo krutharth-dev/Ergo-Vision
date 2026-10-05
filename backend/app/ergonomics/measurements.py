@@ -20,6 +20,7 @@ class ErgonomicMeasurements:
     gaze_vertical_degrees: float = 0.0
     torso_lean_degrees: float = 0.0
     torso_length_ratio: float = 0.0
+    torso_vertical_ratio: float = 0.0
     head_shoulder_gap_ratio: float = 0.0
     torso_depth_ratio: float = 0.0
     slouch_indicator: float = 0.0
@@ -62,6 +63,7 @@ def compute_measurements(landmarks: LandmarkSet | None) -> ErgonomicMeasurements
         (
             measurements.torso_lean_degrees,
             measurements.torso_length_ratio,
+            measurements.torso_vertical_ratio,
             measurements.torso_depth_ratio,
         ) = _compute_torso_metrics(landmarks)
 
@@ -159,13 +161,13 @@ def _compute_head_shoulder_gap(landmarks: LandmarkSet) -> float:
     return vertical_gap / shoulder_width
 
 
-def _compute_torso_metrics(landmarks: LandmarkSet) -> tuple[float, float, float]:
+def _compute_torso_metrics(landmarks: LandmarkSet) -> tuple[float, float, float, float]:
     left_shoulder = landmarks.get("left_shoulder")
     right_shoulder = landmarks.get("right_shoulder")
     left_hip = landmarks.get("left_hip")
     right_hip = landmarks.get("right_hip")
     if not all((left_shoulder, right_shoulder, left_hip, right_hip)):
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
     left_shoulder_pos = (left_shoulder.x, left_shoulder.y)
     right_shoulder_pos = (right_shoulder.x, right_shoulder.y)
@@ -176,13 +178,14 @@ def _compute_torso_metrics(landmarks: LandmarkSet) -> tuple[float, float, float]
     hip_mid = calculate_midpoint(left_hip_pos, right_hip_pos)
     shoulder_width = calculate_distance(left_shoulder_pos, right_shoulder_pos)
     if shoulder_width < 1e-6:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
     torso_lean = abs(angle_from_vertical(hip_mid, shoulder_mid))
     torso_length_ratio = calculate_distance(shoulder_mid, hip_mid) / shoulder_width
+    torso_vertical_ratio = max(0.0, hip_mid[1] - shoulder_mid[1]) / shoulder_width
 
     shoulder_z = (left_shoulder.z + right_shoulder.z) / 2.0
     hip_z = (left_hip.z + right_hip.z) / 2.0
     torso_depth_ratio = clamp((hip_z - shoulder_z) / shoulder_width, -2.0, 2.0)
 
-    return torso_lean, torso_length_ratio, torso_depth_ratio
+    return torso_lean, torso_length_ratio, torso_vertical_ratio, torso_depth_ratio
