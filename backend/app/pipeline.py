@@ -1,4 +1,6 @@
 import logging
+import platform
+import subprocess
 import threading
 import time
 from collections import deque
@@ -41,7 +43,16 @@ class PosturePipeline:
         self._current_score = 0
         self._current_frame_jpeg: bytes | None = None
         self._last_event: dict | None = None
-        self._recent_measurements: deque[ErgonomicMeasurements] = deque(maxlen=90)
+        self._recent_measurements: deque[ErgonomicMeasurements] = deque(maxlen=300)
+
+        # Reminder state lives in the backend so posture monitoring and native
+        # notifications keep working when the dashboard is minimized/closed.
+        self._reminders_enabled = False
+        self._poor_posture_delay_seconds = 10
+        self._movement_break_seconds = 60
+        self._poor_since: float | None = None
+        self._next_break_at = time.monotonic() + self._movement_break_seconds
+        self._last_reminder = ""
 
     def start(self):
         if self._running:
@@ -129,6 +140,7 @@ class PosturePipeline:
 
             tracker_status = "NO_PERSON" if status == "LOW_CONFIDENCE" else status
             self.tracker.update(tracker_status, score)
+            self._maybe_remind(status, smoothed)
             self._maybe_emit(status, smoothed, score, tracking)
 
     def _maybe_emit(self, status, measurements, score, tracking):
@@ -184,11 +196,96 @@ class PosturePipeline:
     def get_session_stats(self) -> dict:
         return self.tracker.get_stats().__dict__
 
-    def capture_calibration(self) -> dict:
-        samples = list(self._recent_measurements)[-60:]
+    def capture_calibration(self, duration_seconds: float = 5.0) -> dict:
+        """Record the user's upright posture for a fresh five-second window."""
+        duration_seconds = max(1.0, min(float(duration_seconds), 10.0))
+        self._recent_measurements.clear()
+        self.smoother.reset()
+        time.sleep(duration_seconds)
+        samples = list(self._recent_measurements)
         self.calibration.capture(samples)
         self.classifier.reset()
         return self.calibration.as_dict()
+
+    @property
+    def background_monitoring_enabled(self) -> bool:
+        return self._reminders_enabled
+
+    def configure_reminders(
+        self,
+        enabled: bool,
+        poor_posture_seconds: int,
+        movement_break_minutes: int,
+    ) -> dict:
+        self._poor_posture_delay_seconds = max(10, min(int(poor_posture_seconds), 1800))
+        self._movement_break_seconds = max(60, min(int(movement_break_minutes) * 60, 1800))
+        self._reminders_enabled = bool(enabled)
+        self._poor_since = None
+        self._next_break_at = time.monotonic() + self._movement_break_seconds
+
+        if self._reminders_enabled and not self._running:
+            self.activate_camera()
+
+        return self.get_reminder_settings()
+
+    def get_reminder_settings(self) -> dict:
+        return {
+            "enabled": self._reminders_enabled,
+            "poor_posture_seconds": self._poor_posture_delay_seconds,
+            "movement_break_minutes": self._movement_break_seconds // 60,
+            "background_monitoring": self._reminders_enabled and self._running,
+            "last_reminder": self._last_reminder,
+        }
+
+    def _maybe_remind(self, status: str, measurements: ErgonomicMeasurements) -> None:
+        if not self._reminders_enabled:
+            return
+
+        now = time.monotonic()
+
+        if now >= self._next_break_at:
+            self._notify_native(
+                "ErgoVision · Movement break",
+                "Stand up, move around, and reset your posture for a minute or two.",
+            )
+            self._next_break_at = now + self._movement_break_seconds
+
+        is_poor = measurements.person_detected and status in {"WARNING", "BAD"}
+        if not is_poor:
+            self._poor_since = None
+            return
+
+        if self._poor_since is None:
+            self._poor_since = now
+            return
+
+        if now - self._poor_since < self._poor_posture_delay_seconds:
+            return
+
+        feedback = self.feedback_engine.generate(measurements, status)
+        body = feedback[0] if feedback else "Return to your calibrated upright posture."
+        self._notify_native("ErgoVision · Posture check", body)
+        # Repeat only if poor posture persists for another selected interval.
+        self._poor_since = now
+
+    def _notify_native(self, title: str, body: str) -> None:
+        self._last_reminder = f"{title}: {body}"
+        if platform.system() != "Darwin":
+            logger.info("%s — %s", title, body)
+            return
+
+        def escape(value: str) -> str:
+            return value.replace("\\", "\\\\").replace('"', '\\"')
+
+        script = f'display notification "{escape(body)}" with title "{escape(title)}"'
+        try:
+            subprocess.Popen(
+                ["osascript", "-e", script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            logger.exception("Could not show macOS notification")
 
     def clear_calibration(self) -> dict:
         self.calibration.clear()
