@@ -11,6 +11,7 @@ export default function CalibrationPanel({ posture }: Props) {
   const [busy, setBusy] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState(0)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const timerRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -21,13 +22,14 @@ export default function CalibrationPanel({ posture }: Props) {
   }, [])
 
   const ready =
-    posture?.tracking.quality === 'EXCELLENT' &&
-    posture.tracking.hips_visible &&
-    posture.tracking.reliable
+    Boolean(posture?.person_detected) &&
+    Boolean(posture?.tracking.reliable) &&
+    Boolean(posture?.tracking.hips_visible)
 
   const capture = async () => {
     setBusy(true)
     setError('')
+    setMessage('')
     setSecondsLeft(5)
 
     if (timerRef.current !== null) window.clearInterval(timerRef.current)
@@ -38,6 +40,7 @@ export default function CalibrationPanel({ posture }: Props) {
     try {
       const result = await api.captureCalibration()
       setProfile(result)
+      setMessage(`Calibration saved successfully from ${result.samples} reliable frames.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not calibrate')
     } finally {
@@ -53,8 +56,10 @@ export default function CalibrationPanel({ posture }: Props) {
   const clear = async () => {
     setBusy(true)
     setError('')
+    setMessage('')
     try {
       setProfile(await api.clearCalibration())
+      setMessage('Calibration reset.')
     } catch {
       setError('Could not reset calibration')
     } finally {
@@ -72,13 +77,14 @@ export default function CalibrationPanel({ posture }: Props) {
       </div>
 
       <p className="muted calibration-copy">
-        Press calibrate, then hold your normal upright posture for the full 5 seconds. ErgoVision records
-        only that fresh 5-second window as your personal baseline.
+        Press calibrate, then hold your normal upright posture for the full 5 seconds. FAIR or EXCELLENT
+        tracking is accepted as long as your head, shoulders and hips remain visible.
       </p>
 
       {!ready && (
         <p className="calibration-meta">
-          Get Camera Setup to EXCELLENT with your head, shoulders and hips visible before calibrating.
+          Move back until your hips are visible and tracking is reliable. Calibration no longer requires
+          EXCELLENT quality.
         </p>
       )}
 
@@ -106,6 +112,7 @@ export default function CalibrationPanel({ posture }: Props) {
         </p>
       )}
 
+      {message && <p className="calibration-meta">{message}</p>}
       {error && <p className="inline-error">{error}</p>}
     </div>
   )
