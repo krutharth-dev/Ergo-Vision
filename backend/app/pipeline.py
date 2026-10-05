@@ -118,7 +118,7 @@ class PosturePipeline:
             tracking = assess_tracking(landmarks)
             measurements = compute_measurements(landmarks)
             smoothed = self.smoother.smooth(measurements)
-            if tracking.quality == "EXCELLENT" and tracking.hips_visible and smoothed.person_detected:
+            if tracking.reliable and tracking.hips_visible and smoothed.person_detected:
                 self._recent_measurements.append(smoothed)
             smoothed.slouch_indicator = self.calibration.slouch_indicator(smoothed)
 
@@ -199,6 +199,10 @@ class PosturePipeline:
     def capture_calibration(self, duration_seconds: float = 5.0) -> dict:
         """Record the user's upright posture for a fresh five-second window."""
         duration_seconds = max(1.0, min(float(duration_seconds), 10.0))
+        if not self._running or not self.camera.is_opened:
+            if not self.activate_camera():
+                raise ValueError("Camera is not available for calibration.")
+
         self._recent_measurements.clear()
         self.smoother.reset()
         time.sleep(duration_seconds)
