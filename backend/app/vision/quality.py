@@ -39,20 +39,19 @@ def assess_tracking(landmarks: LandmarkSet | None) -> TrackingAssessment:
     heads = ("nose_tip", "left_eye_outer", "right_eye_outer", "chin", "forehead")
     shoulders = ("left_shoulder", "right_shoulder")
     hips = ("left_hip", "right_hip")
-    hs, ss, ps = _group(landmarks, heads), _group(landmarks, shoulders), _group(landmarks, hips)
+    hs, ss = _group(landmarks, heads), _group(landmarks, shoulders)
+    ps = _group(landmarks, hips)
     head_visible = all(landmarks.has(n) for n in heads) and hs >= 0.45
     shoulders_visible = all(landmarks.has(n) for n in shoulders) and ss >= 0.45
     hips_visible = all(landmarks.has(n) for n in hips) and ps >= 0.45
-    confidence = 0.35 * hs + 0.35 * ss + 0.30 * ps
+    confidence = 0.55 * hs + 0.45 * ss
     reliable = head_visible and shoulders_visible and confidence >= 0.55
-    quality = "EXCELLENT" if reliable and hips_visible and confidence >= 0.82 else "FAIR" if reliable else "POOR"
+    quality = "EXCELLENT" if reliable and confidence >= 0.82 else "FAIR" if reliable else "POOR"
     guidance = []
     if not head_visible:
         guidance.append("Keep your full head and face visible.")
     if not shoulders_visible:
         guidance.append("Move back until both shoulders are visible.")
-    if not hips_visible:
-        guidance.append("Move back so both hips are visible for stronger hunch detection.")
     if confidence < 0.55:
         guidance.append("Improve lighting and face the camera more directly.")
     return TrackingAssessment(round(confidence, 3), quality, reliable, head_visible, shoulders_visible, hips_visible, guidance)
