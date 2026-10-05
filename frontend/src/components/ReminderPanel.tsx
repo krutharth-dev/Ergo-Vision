@@ -1,222 +1,169 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PostureEvent } from '../types'
+import { useEffect, useState } from 'react'
+import { api } from '../services/api'
+import type { PostureEvent, ReminderSettings } from '../types'
 
 interface Props {
   posture: PostureEvent | null
 }
 
-interface ReminderSettings {
-  enabled: boolean
-  desktopNotifications: boolean
-  breakMinutes: number
-  poorPostureSeconds: number
-  cooldownMinutes: number
-}
+const POOR_POSTURE_OPTIONS = [
+  { seconds: 10, label: '10 sec' },
+  { seconds: 20, label: '20 sec' },
+  { seconds: 30, label: '30 sec' },
+  { seconds: 60, label: '1 min' },
+  { seconds: 120, label: '2 min' },
+  { seconds: 180, label: '3 min' },
+  { seconds: 300, label: '5 min' },
+  { seconds: 600, label: '10 min' },
+  { seconds: 900, label: '15 min' },
+  { seconds: 1200, label: '20 min' },
+  { seconds: 1500, label: '25 min' },
+  { seconds: 1800, label: '30 min' },
+]
 
-const STORAGE_KEY = 'ergovision.reminders.v1'
+const BREAK_OPTIONS = [1, 2, 3, 5, 10, 15, 20, 25, 30]
 
 const DEFAULTS: ReminderSettings = {
   enabled: false,
-  desktopNotifications: true,
-  breakMinutes: 30,
-  poorPostureSeconds: 20,
-  cooldownMinutes: 5,
-}
-
-function loadSettings(): ReminderSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : DEFAULTS
-  } catch {
-    return DEFAULTS
-  }
+  poor_posture_seconds: 10,
+  movement_break_minutes: 5,
+  background_monitoring: false,
+  last_reminder: '',
 }
 
 export default function ReminderPanel({ posture }: Props) {
-  const [settings, setSettings] = useState<ReminderSettings>(loadSettings)
-  const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() =>
-    'Notification' in window ? Notification.permission : 'unsupported',
-  )
-  const [lastAlert, setLastAlert] = useState('')
-  const [nextBreakSeconds, setNextBreakSeconds] = useState(settings.breakMinutes * 60)
-  const settingsRef = useRef(settings)
-  const postureRef = useRef(posture)
-  const lastBreakAt = useRef(Date.now())
-  const poorSince = useRef<number | null>(null)
-  const lastPoorAlertAt = useRef(0)
+  const [settings, setSettings] = useState<ReminderSettings>(DEFAULTS)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    settingsRef.current = settings
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-  }, [settings])
+    let disposed = false
 
-  useEffect(() => {
-    postureRef.current = posture
-  }, [posture])
+    const refresh = async () => {
+      try {
+        const current = await api.reminders()
+        if (!disposed) {
+          setSettings(current)
+          setError('')
+        }
+      } catch {
+        if (!disposed) setError('Background reminder service is unavailable.')
+      }
+    }
 
-  const notificationAvailable = permission !== 'unsupported'
+    refresh()
+    const timer = window.setInterval(refresh, 5000)
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+    }
+  }, [])
 
-  const notify = (title: string, body: string) => {
-    setLastAlert(`${title}: ${body}`)
-    const current = settingsRef.current
-    if (
-      current.desktopNotifications &&
-      notificationAvailable &&
-      Notification.permission === 'granted'
-    ) {
-      new Notification(title, { body, tag: title, silent: false })
+  const save = async (
+    patch: Partial<Pick<ReminderSettings, 'enabled' | 'poor_posture_seconds' | 'movement_break_minutes'>>,
+  ) => {
+    setBusy(true)
+    setError('')
+    const next = { ...settings, ...patch }
+
+    try {
+      const saved = await api.setReminders({
+        enabled: next.enabled,
+        poor_posture_seconds: next.poor_posture_seconds,
+        movement_break_minutes: next.movement_break_minutes,
+      })
+      setSettings(saved)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update reminders.')
+    } finally {
+      setBusy(false)
     }
   }
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const current = settingsRef.current
-      const now = Date.now()
-      const breakMs = Math.max(1, current.breakMinutes) * 60_000
-      const untilBreak = Math.max(0, breakMs - (now - lastBreakAt.current))
-      setNextBreakSeconds(Math.ceil(untilBreak / 1000))
-
-      if (!current.enabled) return
-
-      if (untilBreak <= 0) {
-        notify('Movement break', 'Stand up, move around, and reset your posture for a minute or two.')
-        lastBreakAt.current = now
-      }
-
-      const currentPosture = postureRef.current
-      const isPoor =
-        Boolean(currentPosture?.person_detected) &&
-        (currentPosture?.status === 'WARNING' || currentPosture?.status === 'BAD')
-
-      if (!isPoor) {
-        poorSince.current = null
-        return
-      }
-
-      if (poorSince.current === null) poorSince.current = now
-      const poorForMs = now - poorSince.current
-      const cooldownMs = Math.max(1, current.cooldownMinutes) * 60_000
-
-      if (
-        poorForMs >= current.poorPostureSeconds * 1000 &&
-        now - lastPoorAlertAt.current >= cooldownMs
-      ) {
-        const feedback = currentPosture?.feedback?.[0] ?? 'Adjust your sitting position and return to your calibrated posture.'
-        notify('Posture check', feedback)
-        lastPoorAlertAt.current = now
-        poorSince.current = now
-      }
-    }, 1000)
-
-    return () => window.clearInterval(timer)
-  }, [notificationAvailable])
-
-  const requestNotifications = async () => {
-    if (!notificationAvailable) return
-    const result = await Notification.requestPermission()
-    setPermission(result)
-  }
-
-  const toggleEnabled = async () => {
-    if (!settings.enabled && settings.desktopNotifications && permission === 'default') {
-      await requestNotifications()
-    }
-    lastBreakAt.current = Date.now()
-    poorSince.current = null
-    setSettings((current) => ({ ...current, enabled: !current.enabled }))
-  }
-
-  const resetBreakTimer = () => {
-    lastBreakAt.current = Date.now()
-    setNextBreakSeconds(settings.breakMinutes * 60)
-    setLastAlert('Break timer restarted.')
-  }
-
-  const countdown = useMemo(() => {
-    const minutes = Math.floor(nextBreakSeconds / 60)
-    const seconds = nextBreakSeconds % 60
-    return `${minutes}:${String(seconds).padStart(2, '0')}`
-  }, [nextBreakSeconds])
+  const currentPosture =
+    posture?.status === 'BAD'
+      ? 'Poor posture'
+      : posture?.status === 'WARNING'
+        ? 'Posture warning'
+        : posture?.status === 'GOOD'
+          ? 'Upright'
+          : 'Waiting'
 
   return (
     <div className="card reminder-card">
       <div className="card-title-row">
         <div className="card-title">Smart Reminders</div>
         <span className={`session-state ${settings.enabled ? 'active' : 'paused'}`}>
-          {settings.enabled ? 'ON' : 'OFF'}
+          {settings.enabled ? 'BACKGROUND ON' : 'OFF'}
         </span>
       </div>
 
       <p className="reminder-copy">
-        Get a movement prompt on a timer and a posture alert only after poor posture persists.
+        Choose how long poor posture must persist before ErgoVision sends a native macOS notification.
+        If you stay in poor posture, it repeats after the same selected interval.
       </p>
 
       <div className="setting-grid">
         <label>
-          <span>Movement break</span>
+          <span>Poor-posture notification</span>
           <select
-            value={settings.breakMinutes}
-            onChange={(event) => {
-              const breakMinutes = Number(event.target.value)
-              lastBreakAt.current = Date.now()
-              setSettings((current) => ({ ...current, breakMinutes }))
-            }}
+            value={settings.poor_posture_seconds}
+            disabled={busy}
+            onChange={(event) => save({ poor_posture_seconds: Number(event.target.value) })}
           >
-            <option value={20}>Every 20 min</option>
-            <option value={30}>Every 30 min</option>
-            <option value={45}>Every 45 min</option>
-            <option value={60}>Every 60 min</option>
+            {POOR_POSTURE_OPTIONS.map((option) => (
+              <option key={option.seconds} value={option.seconds}>
+                After {option.label}
+              </option>
+            ))}
           </select>
         </label>
 
         <label>
-          <span>Poor-posture delay</span>
+          <span>Movement break</span>
           <select
-            value={settings.poorPostureSeconds}
-            onChange={(event) =>
-              setSettings((current) => ({ ...current, poorPostureSeconds: Number(event.target.value) }))
-            }
+            value={settings.movement_break_minutes}
+            disabled={busy}
+            onChange={(event) => save({ movement_break_minutes: Number(event.target.value) })}
           >
-            <option value={10}>10 sec</option>
-            <option value={20}>20 sec</option>
-            <option value={30}>30 sec</option>
-            <option value={60}>60 sec</option>
+            {BREAK_OPTIONS.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                Every {minutes} min
+              </option>
+            ))}
           </select>
         </label>
       </div>
 
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={settings.desktopNotifications}
-          onChange={(event) =>
-            setSettings((current) => ({ ...current, desktopNotifications: event.target.checked }))
-          }
-        />
-        <span>Use macOS/browser desktop notifications</span>
-      </label>
+      <div className="reminder-status">
+        <span>Current posture</span>
+        <strong>{currentPosture}</strong>
+      </div>
 
       <div className="reminder-status">
-        <span>Next movement break</span>
-        <strong>{settings.enabled ? countdown : 'Paused'}</strong>
+        <span>Background monitoring</span>
+        <strong>{settings.background_monitoring ? 'Active' : 'Paused'}</strong>
       </div>
 
       <div className="reminder-actions">
-        <button className="button primary" onClick={toggleEnabled}>
-          {settings.enabled ? 'Pause reminders' : 'Enable reminders'}
-        </button>
-        <button className="button" onClick={resetBreakTimer} disabled={!settings.enabled}>
-          Reset timer
+        <button
+          className="button primary"
+          disabled={busy}
+          onClick={() => save({ enabled: !settings.enabled })}
+        >
+          {busy ? 'Updating…' : settings.enabled ? 'Stop background reminders' : 'Enable background reminders'}
         </button>
       </div>
 
-      {notificationAvailable && permission !== 'granted' && settings.desktopNotifications && (
-        <button className="text-button reminder-permission" onClick={requestNotifications}>
-          {permission === 'denied' ? 'Notifications are blocked in the browser' : 'Allow desktop notifications'}
-        </button>
-      )}
+      <p className="calibration-meta">
+        When enabled, the Python backend keeps posture monitoring active even if this dashboard tab is
+        minimized or closed. It stops when you disable reminders or stop ErgoVision.
+      </p>
 
-      {lastAlert && <p className="reminder-last-alert">{lastAlert}</p>}
+      {settings.last_reminder && (
+        <p className="reminder-last-alert">Last alert: {settings.last_reminder}</p>
+      )}
+      {error && <p className="inline-error">{error}</p>}
     </div>
   )
 }
