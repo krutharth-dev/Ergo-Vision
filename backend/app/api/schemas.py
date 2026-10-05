@@ -58,12 +58,11 @@ class CalibrationResponse(BaseModel):
     version: int
     calibrated: bool
     captured_at: str | None
-    torso_length_ratio: float
-    torso_vertical_ratio: float
-    head_shoulder_gap_ratio: float
-    torso_depth_ratio: float
-    forward_head_indicator: float
+    head_tilt_degrees: float
     shoulder_alignment_degrees: float
+    neck_offset: float
+    head_shoulder_gap_ratio: float
+    forward_head_indicator: float
     samples: int
 
 
