@@ -15,7 +15,27 @@ def measurement(torso=1.7, gap=1.4, depth=0.0, forward=0.2):
     )
 
 
-def test_calibration_detects_change(tmp_path: Path, monkeypatch):
+def test_uncalibrated_profile_does_not_guess_slouch_from_body_proportions():
+    profile = CalibrationProfile()
+    unusual_but_upright = measurement(torso=0.95, gap=0.72, depth=0.35, forward=0.55)
+    assert profile.slouch_indicator(unusual_but_upright) == 0.0
+
+
+def test_calibration_accepts_stable_personal_proportions(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture(
+        [measurement(torso=0.95, gap=0.72, depth=0.35, forward=0.55) for _ in range(20)]
+    )
+    assert profile.calibrated
+    assert profile.slouch_indicator(
+        measurement(torso=0.95, gap=0.72, depth=0.35, forward=0.55)
+    ) < 0.1
+
+
+def test_calibration_detects_correlated_posture_change(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
     monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
 
@@ -26,6 +46,30 @@ def test_calibration_detects_change(tmp_path: Path, monkeypatch):
 
     hunched = measurement(torso=1.15, gap=0.85, depth=0.5, forward=0.55)
     assert profile.slouch_indicator(hunched) >= 0.7
+
+
+def test_single_noisy_signal_does_not_trigger_slouch(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement() for _ in range(20)])
+
+    depth_jitter_only = measurement(depth=0.8)
+    assert profile.slouch_indicator(depth_jitter_only) < 0.35
+
+
+def test_old_calibration_profile_is_invalidated(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+    (tmp_path / "calibration.json").write_text(
+        '{"calibrated": true, "torso_length_ratio": 1.7, '
+        '"head_shoulder_gap_ratio": 1.4, "torso_depth_ratio": 0.0, '
+        '"forward_head_indicator": 0.2, "samples": 20}',
+        encoding="utf-8",
+    )
+
+    profile = CalibrationProfile.load()
+    assert not profile.calibrated
 
 
 def test_calibration_requires_enough_samples():
