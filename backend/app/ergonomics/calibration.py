@@ -12,7 +12,7 @@ from .measurements import ErgonomicMeasurements
 
 DATA_DIR = Path(os.environ.get("ERGOVISION_DATA_DIR", str(Path.home() / ".ergovision")))
 CALIBRATION_PATH = DATA_DIR / "calibration.json"
-CALIBRATION_VERSION = 4
+CALIBRATION_VERSION = 5
 
 
 @dataclass
