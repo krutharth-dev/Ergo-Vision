@@ -12,7 +12,7 @@ from .measurements import ErgonomicMeasurements
 
 DATA_DIR = Path(os.environ.get("ERGOVISION_DATA_DIR", str(Path.home() / ".ergovision")))
 CALIBRATION_PATH = DATA_DIR / "calibration.json"
-CALIBRATION_VERSION = 2
+CALIBRATION_VERSION = 3
 
 
 @dataclass
@@ -21,6 +21,7 @@ class CalibrationProfile:
     calibrated: bool = False
     captured_at: str | None = None
     torso_length_ratio: float = 0.0
+    torso_vertical_ratio: float = 0.0
     head_shoulder_gap_ratio: float = 0.0
     torso_depth_ratio: float = 0.0
     forward_head_indicator: float = 0.0
@@ -44,7 +45,7 @@ class CalibrationProfile:
             for s in samples
             if s.person_detected
             and s.torso_length_ratio > 0
-            and s.head_shoulder_gap_ratio > 0
+            and s.torso_vertical_ratio > 0
         ]
         if len(valid) < 20:
             raise ValueError(
@@ -53,7 +54,8 @@ class CalibrationProfile:
             )
 
         torso = [s.torso_length_ratio for s in valid]
-        gaps = [s.head_shoulder_gap_ratio for s in valid]
+        vertical = [s.torso_vertical_ratio for s in valid]
+        gaps = [s.head_shoulder_gap_ratio for s in valid if s.head_shoulder_gap_ratio > 0]
         depths = [s.torso_depth_ratio for s in valid]
         forward = [s.forward_head_indicator for s in valid]
 
@@ -61,7 +63,8 @@ class CalibrationProfile:
         # against a generic body-shape template.
         if (
             _relative_variation(torso) > 0.08
-            or _relative_variation(gaps) > 0.10
+            or _relative_variation(vertical) > 0.08
+            or (gaps and _relative_variation(gaps) > 0.10)
             or pstdev(forward) > 0.10
         ):
             raise ValueError(
@@ -72,7 +75,8 @@ class CalibrationProfile:
         self.calibrated = True
         self.captured_at = datetime.now(timezone.utc).isoformat()
         self.torso_length_ratio = mean(torso)
-        self.head_shoulder_gap_ratio = mean(gaps)
+        self.torso_vertical_ratio = mean(vertical)
+        self.head_shoulder_gap_ratio = mean(gaps) if gaps else 0.0
         self.torso_depth_ratio = mean(depths)
         self.forward_head_indicator = mean(forward)
         self.samples = len(valid)
@@ -83,6 +87,7 @@ class CalibrationProfile:
         self.calibrated = False
         self.captured_at = None
         self.torso_length_ratio = 0.0
+        self.torso_vertical_ratio = 0.0
         self.head_shoulder_gap_ratio = 0.0
         self.torso_depth_ratio = 0.0
         self.forward_head_indicator = 0.0
@@ -105,6 +110,18 @@ class CalibrationProfile:
             return 0.0
 
         signals: list[float] = []
+
+        if self.torso_vertical_ratio > 0 and measurement.torso_vertical_ratio > 0:
+            vertical_drop = self.torso_vertical_ratio - measurement.torso_vertical_ratio
+            # Vertical shoulder-to-hip compression is the most reliable
+            # front-camera cue for chest collapse / hunching.
+            signals.append(
+                clamp(
+                    vertical_drop / max(self.torso_vertical_ratio * 0.16, 0.10),
+                    0.0,
+                    1.0,
+                )
+            )
 
         if self.torso_length_ratio > 0 and measurement.torso_length_ratio > 0:
             drop = self.torso_length_ratio - measurement.torso_length_ratio
