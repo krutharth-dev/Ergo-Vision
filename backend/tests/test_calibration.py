@@ -48,15 +48,27 @@ def test_calibration_detects_correlated_posture_change(tmp_path: Path, monkeypat
     assert profile.slouch_indicator(hunched) >= 0.7
 
 
-def test_single_noisy_signal_does_not_trigger_slouch(tmp_path: Path, monkeypatch):
+def test_mild_single_signal_jitter_does_not_trigger_slouch(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
     monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
 
     profile = CalibrationProfile()
     profile.capture([measurement() for _ in range(20)])
 
-    depth_jitter_only = measurement(depth=0.8)
-    assert profile.slouch_indicator(depth_jitter_only) < 0.35
+    mild_depth_jitter = measurement(depth=0.2)
+    assert profile.slouch_indicator(mild_depth_jitter) < 0.35
+
+
+def test_strong_depth_only_change_can_trigger_warning(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement() for _ in range(20)])
+
+    front_facing_slouch = measurement(depth=0.55)
+    indicator = profile.slouch_indicator(front_facing_slouch)
+    assert 0.35 <= indicator < 0.70
 
 
 def test_old_calibration_profile_is_invalidated(tmp_path: Path, monkeypatch):
