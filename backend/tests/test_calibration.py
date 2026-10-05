@@ -5,10 +5,11 @@ from app.ergonomics.calibration import CalibrationProfile
 from app.ergonomics.measurements import ErgonomicMeasurements
 
 
-def measurement(torso=1.7, gap=1.4, depth=0.0, forward=0.2):
+def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2):
     return ErgonomicMeasurements(
         person_detected=True,
         torso_length_ratio=torso,
+        torso_vertical_ratio=vertical,
         head_shoulder_gap_ratio=gap,
         torso_depth_ratio=depth,
         forward_head_indicator=forward,
@@ -44,7 +45,7 @@ def test_calibration_detects_correlated_posture_change(tmp_path: Path, monkeypat
     assert profile.calibrated
     assert profile.slouch_indicator(measurement()) < 0.1
 
-    hunched = measurement(torso=1.15, gap=0.85, depth=0.5, forward=0.55)
+    hunched = measurement(torso=1.15, vertical=1.05, gap=0.85, depth=0.5, forward=0.55)
     assert profile.slouch_indicator(hunched) >= 0.7
 
 
@@ -92,3 +93,14 @@ def test_calibration_requires_enough_samples():
         pass
     else:
         raise AssertionError("Expected calibration to require more samples")
+
+
+def test_vertical_compression_alone_can_trigger_slouch_warning(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement() for _ in range(20)])
+
+    compressed = measurement(vertical=1.30)
+    assert profile.slouch_indicator(compressed) >= 0.35
