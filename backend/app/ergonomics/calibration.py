@@ -101,7 +101,14 @@ class CalibrationProfile:
 
     def apply_personal_baseline(self, measurement: ErgonomicMeasurements) -> ErgonomicMeasurements:
         if not self.calibrated:
-            return replace(measurement)
+            return replace(
+                measurement,
+                gaze_vertical_degrees=0.0,
+                torso_lean_degrees=0.0,
+                torso_length_ratio=0.0,
+                torso_vertical_ratio=0.0,
+                torso_depth_ratio=0.0,
+            )
 
         head_tilt_delta = max(0.0, measurement.head_tilt_degrees - self.head_tilt_degrees)
         shoulder_delta = max(
@@ -125,6 +132,7 @@ class CalibrationProfile:
             shoulder_alignment_score=max(0.0, 1.0 - shoulder_delta / 20.0),
             neck_offset=neck_delta,
             forward_head_indicator=forward_severity,
+            gaze_vertical_degrees=0.0,
             torso_lean_degrees=0.0,
             torso_length_ratio=0.0,
             torso_vertical_ratio=0.0,
