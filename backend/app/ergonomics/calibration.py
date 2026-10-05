@@ -121,10 +121,20 @@ class CalibrationProfile:
         )
         shoulder_score = max(0.0, 1.0 - shoulder_delta / 20.0)
 
+        # Convert forward-head movement into a personal 0..1 severity score.
+        # A roughly 0.11 increase over the calibrated value reaches WARNING
+        # and ~0.14 reaches BAD with the existing 0.6 / 0.8 thresholds.
+        forward_delta = max(
+            0.0,
+            measurement.forward_head_indicator - self.forward_head_indicator,
+        )
+        forward_severity = clamp(forward_delta / 0.18, 0.0, 1.0)
+
         return replace(
             measurement,
             shoulder_alignment_degrees=shoulder_delta,
             shoulder_alignment_score=shoulder_score,
+            forward_head_indicator=forward_severity,
         )
 
     def slouch_indicator(self, measurement: ErgonomicMeasurements) -> float:
