@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean, pstdev
@@ -12,7 +12,7 @@ from .measurements import ErgonomicMeasurements
 
 DATA_DIR = Path(os.environ.get("ERGOVISION_DATA_DIR", str(Path.home() / ".ergovision")))
 CALIBRATION_PATH = DATA_DIR / "calibration.json"
-CALIBRATION_VERSION = 3
+CALIBRATION_VERSION = 4
 
 
 @dataclass
@@ -25,6 +25,7 @@ class CalibrationProfile:
     head_shoulder_gap_ratio: float = 0.0
     torso_depth_ratio: float = 0.0
     forward_head_indicator: float = 0.0
+    shoulder_alignment_degrees: float = 0.0
     samples: int = 0
 
     @classmethod
@@ -58,6 +59,7 @@ class CalibrationProfile:
         gaps = [s.head_shoulder_gap_ratio for s in valid if s.head_shoulder_gap_ratio > 0]
         depths = [s.torso_depth_ratio for s in valid]
         forward = [s.forward_head_indicator for s in valid]
+        shoulders = [s.shoulder_alignment_degrees for s in valid]
 
         # Learn this user's own upright proportions. Do not reject calibration
         # against a generic body-shape template.
@@ -66,6 +68,7 @@ class CalibrationProfile:
             or _relative_variation(vertical) > 0.08
             or (gaps and _relative_variation(gaps) > 0.10)
             or pstdev(forward) > 0.10
+            or pstdev(shoulders) > 2.5
         ):
             raise ValueError(
                 "Too much movement was detected. Hold still and try calibration again."
@@ -79,6 +82,9 @@ class CalibrationProfile:
         self.head_shoulder_gap_ratio = mean(gaps) if gaps else 0.0
         self.torso_depth_ratio = mean(depths)
         self.forward_head_indicator = mean(forward)
+        # Natural shoulder asymmetry is part of the user's neutral baseline.
+        # We care about change from this posture, not perfect anatomical symmetry.
+        self.shoulder_alignment_degrees = mean(shoulders)
         self.samples = len(valid)
         self.save()
 
@@ -91,6 +97,7 @@ class CalibrationProfile:
         self.head_shoulder_gap_ratio = 0.0
         self.torso_depth_ratio = 0.0
         self.forward_head_indicator = 0.0
+        self.shoulder_alignment_degrees = 0.0
         self.samples = 0
         try:
             CALIBRATION_PATH.unlink(missing_ok=True)
@@ -102,6 +109,23 @@ class CalibrationProfile:
         temp = CALIBRATION_PATH.with_suffix(".json.tmp")
         temp.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
         temp.replace(CALIBRATION_PATH)
+
+    def apply_personal_baseline(self, measurement: ErgonomicMeasurements) -> ErgonomicMeasurements:
+        """Return posture measurements normalized to the user's calibrated neutral pose."""
+        if not self.calibrated:
+            return measurement
+
+        shoulder_delta = max(
+            0.0,
+            measurement.shoulder_alignment_degrees - self.shoulder_alignment_degrees,
+        )
+        shoulder_score = max(0.0, 1.0 - shoulder_delta / 20.0)
+
+        return replace(
+            measurement,
+            shoulder_alignment_degrees=shoulder_delta,
+            shoulder_alignment_score=shoulder_score,
+        )
 
     def slouch_indicator(self, measurement: ErgonomicMeasurements) -> float:
         # Slouch is relative to a person's normal upright posture. Before
