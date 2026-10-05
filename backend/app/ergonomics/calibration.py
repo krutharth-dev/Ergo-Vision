@@ -113,7 +113,7 @@ class CalibrationProfile:
     def apply_personal_baseline(self, measurement: ErgonomicMeasurements) -> ErgonomicMeasurements:
         """Return posture measurements normalized to the user's calibrated neutral pose."""
         if not self.calibrated:
-            return measurement
+            return replace(measurement)
 
         shoulder_delta = max(
             0.0,
