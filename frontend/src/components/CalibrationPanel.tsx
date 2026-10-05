@@ -24,7 +24,8 @@ export default function CalibrationPanel({ posture }: Props) {
   const ready =
     Boolean(posture?.person_detected) &&
     Boolean(posture?.tracking.reliable) &&
-    Boolean(posture?.tracking.hips_visible)
+    Boolean(posture?.tracking.head_visible) &&
+    Boolean(posture?.tracking.shoulders_visible)
 
   const capture = async () => {
     setBusy(true)
@@ -77,15 +78,15 @@ export default function CalibrationPanel({ posture }: Props) {
       </div>
 
       <p className="muted calibration-copy">
-        Press calibrate, then hold your normal comfortable upright posture for the full 5 seconds. FAIR
-        or EXCELLENT tracking is accepted. A slight natural shoulder imbalance is completely okay — it
-        becomes part of your personal baseline instead of being treated as bad posture.
+        Press calibrate, then hold your normal comfortable posture for the full 5 seconds. ErgoVision now
+        uses only your head and shoulders. A slight natural shoulder imbalance is okay and becomes part of
+        your personal baseline.
       </p>
 
       {!ready && (
         <p className="calibration-meta">
-          Move back until your hips are visible and tracking is reliable. Your posture can be GOOD or
-          slightly imbalanced; symmetry is not required for calibration.
+          Keep your full head and both shoulders visible. Hip visibility is not required, and perfect
+          shoulder symmetry is not required.
         </p>
       )}
 
