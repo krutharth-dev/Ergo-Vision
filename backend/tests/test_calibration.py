@@ -132,3 +132,20 @@ def test_only_extra_shoulder_imbalance_is_penalized(tmp_path: Path, monkeypatch)
 
     slightly_more_uneven = profile.apply_personal_baseline(measurement(shoulder=9.0))
     assert abs(slightly_more_uneven.shoulder_alignment_degrees - 3.0) < 0.01
+
+
+
+def test_forward_head_is_relative_to_personal_baseline(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+
+    profile = CalibrationProfile()
+    profile.capture([measurement(forward=0.20) for _ in range(20)])
+
+    neutral = profile.apply_personal_baseline(measurement(forward=0.20))
+    warning = profile.apply_personal_baseline(measurement(forward=0.32))
+    bad = profile.apply_personal_baseline(measurement(forward=0.36))
+
+    assert neutral.forward_head_indicator == 0.0
+    assert warning.forward_head_indicator >= 0.60
+    assert bad.forward_head_indicator >= 0.80
