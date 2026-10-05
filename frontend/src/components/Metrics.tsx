@@ -35,8 +35,6 @@ export default function Metrics({ posture, config }: Props) {
       <table className="metrics-table">
         <tbody>
           <tr><td>Slouch / Hunch</td><td>{SLOUCH_LABEL(measurement.slouch_indicator, config)} ({measurement.slouch_indicator.toFixed(2)})</td></tr>
-          <tr><td>Torso Compression</td><td>{measurement.torso_vertical_ratio.toFixed(2)}</td></tr>
-          <tr><td>Torso Lean</td><td>{measurement.torso_lean_degrees.toFixed(1)}°</td></tr>
           <tr><td>Head Tilt</td><td>{measurement.head_tilt_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Angle</td><td>{measurement.shoulder_alignment_degrees.toFixed(1)}°</td></tr>
           <tr><td>Shoulder Alignment</td><td>{SHOULDER_LABEL(measurement.shoulder_alignment_score)}</td></tr>
@@ -45,9 +43,7 @@ export default function Metrics({ posture, config }: Props) {
           <tr><td>Gaze Angle</td><td>{measurement.gaze_vertical_degrees.toFixed(1)}°</td></tr>
         </tbody>
       </table>
-      {measurement.torso_length_ratio === 0 && (
-        <p className="metric-note">Tip: keep your hips visible for stronger torso and hunch detection.</p>
-      )}
+      <p className="metric-note">Personal posture tracking uses head + shoulders only.</p>
     </div>
   )
 }
