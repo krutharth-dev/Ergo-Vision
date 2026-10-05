@@ -5,89 +5,113 @@ from app.ergonomics.calibration import CalibrationProfile
 from app.ergonomics.measurements import ErgonomicMeasurements
 
 
-def measurement(torso=1.7, vertical=1.6, gap=1.4, depth=0.0, forward=0.2, face=0.14, shoulder=0.0):
+def measurement(
+    *,
+    head_tilt=2.0,
+    shoulder=6.0,
+    neck=0.03,
+    gap=1.20,
+    forward=0.25,
+    torso_lean=20.0,
+    torso=0.0,
+    vertical=0.0,
+    depth=0.0,
+):
     return ErgonomicMeasurements(
         person_detected=True,
+        head_tilt_degrees=head_tilt,
+        shoulder_alignment_degrees=shoulder,
+        neck_offset=neck,
+        head_shoulder_gap_ratio=gap,
+        forward_head_indicator=forward,
+        torso_lean_degrees=torso_lean,
         torso_length_ratio=torso,
         torso_vertical_ratio=vertical,
-        head_shoulder_gap_ratio=gap,
         torso_depth_ratio=depth,
-        forward_head_indicator=forward,
-        face_scale=face,
-        shoulder_alignment_degrees=shoulder,
     )
 
 
-def test_uncalibrated_profile_does_not_guess_slouch_from_body_proportions():
-    profile = CalibrationProfile()
-    unusual_but_upright = measurement(torso=0.95, gap=0.72, depth=0.35, forward=0.55)
-    assert profile.slouch_indicator(unusual_but_upright) == 0.0
-
-
-def test_calibration_accepts_stable_personal_proportions(tmp_path: Path, monkeypatch):
+def configure_paths(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
     monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
 
+
+def test_calibration_needs_only_head_and_shoulders(tmp_path: Path, monkeypatch):
+    configure_paths(tmp_path, monkeypatch)
     profile = CalibrationProfile()
-    profile.capture(
-        [measurement(torso=0.95, gap=0.72, depth=0.35, forward=0.55) for _ in range(20)]
-    )
+
+    profile.capture([measurement() for _ in range(20)])
+
     assert profile.calibrated
-    assert profile.slouch_indicator(
-        measurement(torso=0.95, gap=0.72, depth=0.35, forward=0.55)
-    ) < 0.1
+    assert profile.samples == 20
 
 
-def test_calibration_detects_correlated_posture_change(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
+def test_natural_shoulder_asymmetry_becomes_neutral(tmp_path: Path, monkeypatch):
+    configure_paths(tmp_path, monkeypatch)
+    profile = CalibrationProfile()
+    profile.capture([measurement(shoulder=7.0) for _ in range(20)])
 
+    neutral = profile.apply_personal_baseline(measurement(shoulder=7.0))
+    slightly_more = profile.apply_personal_baseline(measurement(shoulder=10.0))
+
+    assert neutral.shoulder_alignment_degrees == 0.0
+    assert neutral.shoulder_alignment_score == 1.0
+    assert abs(slightly_more.shoulder_alignment_degrees - 3.0) < 0.01
+
+
+def test_natural_head_tilt_becomes_neutral(tmp_path: Path, monkeypatch):
+    configure_paths(tmp_path, monkeypatch)
+    profile = CalibrationProfile()
+    profile.capture([measurement(head_tilt=4.0) for _ in range(20)])
+
+    neutral = profile.apply_personal_baseline(measurement(head_tilt=4.0))
+    changed = profile.apply_personal_baseline(measurement(head_tilt=10.0))
+
+    assert neutral.head_tilt_degrees == 0.0
+    assert abs(changed.head_tilt_degrees - 6.0) < 0.01
+
+
+def test_forward_head_is_relative_to_baseline(tmp_path: Path, monkeypatch):
+    configure_paths(tmp_path, monkeypatch)
+    profile = CalibrationProfile()
+    profile.capture([measurement(forward=0.20) for _ in range(20)])
+
+    neutral = profile.apply_personal_baseline(measurement(forward=0.20))
+    warning = profile.apply_personal_baseline(measurement(forward=0.32))
+
+    assert neutral.forward_head_indicator == 0.0
+    assert warning.forward_head_indicator >= 0.60
+
+
+def test_head_shoulder_gap_can_detect_hunch(tmp_path: Path, monkeypatch):
+    configure_paths(tmp_path, monkeypatch)
+    profile = CalibrationProfile()
+    profile.capture([measurement(gap=1.20, forward=0.20) for _ in range(20)])
+
+    neutral = measurement(gap=1.20, forward=0.20)
+    hunched = measurement(gap=0.85, forward=0.20)
+
+    assert profile.slouch_indicator(neutral) < 0.1
+    assert profile.slouch_indicator(hunched) >= 0.35
+
+
+def test_torso_and_hip_metrics_are_ignored_after_baseline(tmp_path: Path, monkeypatch):
+    configure_paths(tmp_path, monkeypatch)
     profile = CalibrationProfile()
     profile.capture([measurement() for _ in range(20)])
-    assert profile.calibrated
-    assert profile.slouch_indicator(measurement()) < 0.1
 
-    hunched = measurement(torso=1.15, vertical=1.05, gap=0.85, depth=0.5, forward=0.55)
-    assert profile.slouch_indicator(hunched) >= 0.7
-
-
-def test_mild_single_signal_jitter_does_not_trigger_slouch(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement() for _ in range(20)])
-
-    mild_depth_jitter = measurement(depth=0.2)
-    assert profile.slouch_indicator(mild_depth_jitter) < 0.35
-
-
-def test_strong_depth_only_change_can_trigger_warning(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement() for _ in range(20)])
-
-    front_facing_slouch = measurement(depth=0.55)
-    indicator = profile.slouch_indicator(front_facing_slouch)
-    assert 0.35 <= indicator < 0.70
-
-
-def test_old_calibration_profile_is_invalidated(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-    (tmp_path / "calibration.json").write_text(
-        '{"calibrated": true, "torso_length_ratio": 1.7, '
-        '"head_shoulder_gap_ratio": 1.4, "torso_depth_ratio": 0.0, '
-        '"forward_head_indicator": 0.2, "samples": 20}',
-        encoding="utf-8",
+    evaluated = profile.apply_personal_baseline(
+        measurement(torso_lean=35.0, torso=0.6, vertical=0.4, depth=1.2)
     )
 
-    profile = CalibrationProfile.load()
-    assert not profile.calibrated
+    assert evaluated.torso_lean_degrees == 0.0
+    assert evaluated.torso_length_ratio == 0.0
+    assert evaluated.torso_vertical_ratio == 0.0
+    assert evaluated.torso_depth_ratio == 0.0
+    assert evaluated.gaze_vertical_degrees == 0.0
 
 
-def test_calibration_requires_enough_samples():
+def test_calibration_requires_enough_head_shoulder_samples():
     profile = CalibrationProfile()
     try:
         profile.capture([measurement() for _ in range(3)])
@@ -95,75 +119,3 @@ def test_calibration_requires_enough_samples():
         pass
     else:
         raise AssertionError("Expected calibration to require more samples")
-
-
-def test_vertical_compression_alone_can_trigger_slouch_warning(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement() for _ in range(20)])
-
-    compressed = measurement(vertical=1.30)
-    assert profile.slouch_indicator(compressed) >= 0.35
-
-
-
-def test_calibration_accepts_stable_natural_shoulder_asymmetry(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement(shoulder=7.0) for _ in range(20)])
-
-    assert profile.calibrated
-    assert abs(profile.shoulder_alignment_degrees - 7.0) < 0.01
-
-    neutral = profile.apply_personal_baseline(measurement(shoulder=7.0))
-    assert neutral.shoulder_alignment_degrees == 0.0
-    assert neutral.shoulder_alignment_score == 1.0
-
-
-def test_only_extra_shoulder_imbalance_is_penalized(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement(shoulder=6.0) for _ in range(20)])
-
-    slightly_more_uneven = profile.apply_personal_baseline(measurement(shoulder=9.0))
-    assert abs(slightly_more_uneven.shoulder_alignment_degrees - 3.0) < 0.01
-
-
-
-def test_forward_head_is_relative_to_personal_baseline(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement(forward=0.20) for _ in range(20)])
-
-    neutral = profile.apply_personal_baseline(measurement(forward=0.20))
-    warning = profile.apply_personal_baseline(measurement(forward=0.32))
-    bad = profile.apply_personal_baseline(measurement(forward=0.36))
-
-    assert neutral.forward_head_indicator == 0.0
-    assert warning.forward_head_indicator >= 0.60
-    assert bad.forward_head_indicator >= 0.80
-
-
-
-def test_whole_body_move_toward_screen_triggers_forward_warning(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(calibration_module, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(calibration_module, "CALIBRATION_PATH", tmp_path / "calibration.json")
-
-    profile = CalibrationProfile()
-    profile.capture([measurement(face=0.14) for _ in range(20)])
-
-    neutral = profile.apply_personal_baseline(measurement(face=0.14))
-    closer = profile.apply_personal_baseline(measurement(face=0.162))
-    much_closer = profile.apply_personal_baseline(measurement(face=0.168))
-
-    assert neutral.forward_head_indicator == 0.0
-    assert closer.forward_head_indicator >= 0.60
-    assert much_closer.forward_head_indicator >= 0.80
