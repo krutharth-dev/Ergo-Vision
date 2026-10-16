@@ -43,7 +43,7 @@ A source checkout requires Git and may require Node.js because `frontend/dist` i
 ### macOS
 
 ```bash
-git clone https://github.com/mjkr-1/Ergo-Vision.git
+git clone https://github.com/krutharth-dev/Ergo-Vision.git
 cd Ergo-Vision
 bash scripts/setup_mac.sh
 bash scripts/install_mac_app.sh
@@ -52,7 +52,7 @@ bash scripts/install_mac_app.sh
 ### Windows
 
 ```powershell
-git clone https://github.com/mjkr-1/Ergo-Vision.git
+git clone https://github.com/krutharth-dev/Ergo-Vision.git
 cd Ergo-Vision
 powershell -ExecutionPolicy Bypass -File .\scripts\setup_windows.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\install_windows_shortcut.ps1
